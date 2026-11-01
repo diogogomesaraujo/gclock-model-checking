@@ -1,9 +1,9 @@
-Model Checking a real-world protocols against the ideal functionality GClock following the UC framework.
-
-Prove there exists π, A, Z s.t. forall S : EXEC_{π,A,Z} ≉ EXEC_{GClock,S,Z}
-
-Possible counter-example executions: 
-- a real-world model where honest parties can leave the protocol
-- a real-world model that can't guarantee that all honest parties register before starting the protocol
-- a real-world model with drifting local clocks (such as NTP)
-- one where messages are delivered asynchronously and can have delay.
+TODO:
+- [ ] Corruptions should be decided by the environemnt in the ideal world.
+- [ ] Model two ideal worlds: 
+    - [ ] One where a party p1 is corrupted, p2 sends Ok and round advances.
+    - [ ] One where p1 is honest but silent, p2 sends Ok and the round does not advance.
+- [ ] Model two real worlds: 
+    - [ ] One where p1 is corrupted and sends nothing.
+    - [ ] one where p1 is honest but never activated again.
+- p2 will see the same thing in the real world but different things in the ideal one.
