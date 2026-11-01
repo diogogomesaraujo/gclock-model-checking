@@ -199,8 +199,8 @@ module iw {
     // ^^^^^^
 
     type IwClockInput = IwClockInputReg(P_Sid_t)   // in the paper Psid.Reg()
-                    | IwClockInputRound(P_Sid_t) // in the paper Psid.Round()
-                    | IwClockInputOk(P_Sid_t)    // in the paper Psid.OK()
+                      | IwClockInputRound(P_Sid_t) // in the paper Psid.Round()
+                      | IwClockInputOk(P_Sid_t)    // in the paper Psid.OK()
 
     type IwClockOutput = ()
 
@@ -316,12 +316,12 @@ module iw {
     // Simulator
     // ^^^^^^^^^
 
-    type IwSimulatorInput = ()
+    type IwSimulatorInput = IwSimulatorInputCorrupt(P_Sid_t)
 
     type IwSimulatorOutput = ()
 
     type IwSimulatorIncoming = IwSimulatorIncomingRound(Round_t)
-                             | IwSimulatorIncomingOk(P_Sid_t )
+                             | IwSimulatorIncomingOk(P_Sid_t)
 
 
     type IwSimulatorITM = ITM[IwSimulatorInput, IwSimulatorOutput, IwSimulatorIncoming]
@@ -333,7 +333,9 @@ module iw {
         current_round     : Round_t
     }
 
-    type IwSimulatorAction = IwSimulatorActionCorrupt(P_Sid_t) | IwSimulatorActionRoundRequest | IwSimulatorActionRdIncoming
+    type IwSimulatorAction = IwSimulatorActionRoundRequest
+                           | IwSimulatorActionRdIncoming
+                           | IwSimulatorActionRdInput
 
     type IwSimulatorEffect = IwSimulatorEffectUpdateItm(ItmEffect[IwSimulatorInput, IwSimulatorOutput, IwSimulatorIncoming])
                          | IwSimulatorEffectUpdatedOked(P_Sid_t)
@@ -351,7 +353,7 @@ module iw {
 
     pure def IwSimulatorInit : IwSimulatorState = {
         itm               : ItmInit(S_Sid),
-        parties_that_oked : Set(),          
+        parties_that_oked : Set(),
         corrupted_parties : Set(),
         current_round     : FirstRound
     }
@@ -379,9 +381,14 @@ module iw {
 
     pure def IwSimulatorTransition(which : IwSimulatorAction, s : IwSimulatorState, idle : bool) : Effects_t[IwEffect] = {
         match which {
-            | IwSimulatorActionCorrupt(p_sid) => if (idle) 
-                                               if (size(s.corrupted_parties) < CorruptedBound) IwSimulatorCorrupt(p_sid) 
-                                               else [] else []
+            | IwSimulatorActionRdInput        => match ReadNewInput(s.itm) {
+                                                    | Some(input_message) => {
+                                                        (match input_message {
+                                                            | IwSimulatorInputCorrupt(p_sid) => IwSimulatorCorrupt(p_sid)
+                                                        }).append(SimulatorIwEffect(IwSimulatorEffectUpdateItm(ItmEffectPopInput)))
+                                                    }
+                                                    | _ => []
+                                                 }
             | IwSimulatorActionRoundRequest   => if (idle) IwSimulatorRound else []
             | IwSimulatorActionRdIncoming     => match ReadNewIncoming(s.itm) {
                                                     | Some(incoming_message) => {
@@ -407,16 +414,20 @@ module iw {
                              | IwEnvironmentOutputFailed(P_Sid_t)                             // in the paper ⊥
 
     type IwEnvironmentState = {
-        registered : Set[P_Sid_t],        
-        seen_round : P_Sid_t -> Round_t, 
+        registered : Set[P_Sid_t],
+        seen_round : P_Sid_t -> Round_t,
+        corrupted  : Set[P_Sid_t]
     }
 
     type IwEnvironmentEffect = IwEnvironmentEffectObserve(IwEnvironmentOutput)
                              | IwEnvironmentEffectClearRounds
+                             | IwEnvironmentEffectUpdateRegistered(P_Sid_t)
+                             | IwEnvironmentEffectUpdateCorrupted(P_Sid_t)
 
     type IwEnvironmentAction = IwEnvironmentActionSetOk(P_Sid_t)
                              | IwEnvironmentActionGetRound(P_Sid_t)
                              | IwEnvironmentActionRegister(P_Sid_t)
+                             | IwEnvironmentActionCorrupt(P_Sid_t)
 
     pure def IwEnvironmentApplyEffect(state : IwEnvironmentState, effect : IwEnvironmentEffect) : IwEnvironmentState = {
         match (effect) {
@@ -424,13 +435,15 @@ module iw {
                 match out {
                     | IwEnvironmentOutputRegisterOk(p) => state.with("registered", state.registered.union(Set(p)))
                     | IwEnvironmentOutputRound(r)      => state.with("seen_round", state.seen_round.put(r.p_sid, r.round))
-                    | _                              => state
+                    | _                                => state
                 }
-            | IwEnvironmentEffectClearRounds  => state.with("seen_round", Map())
+            | IwEnvironmentEffectClearRounds             => state.with("seen_round", Map())
+            | IwEnvironmentEffectUpdateCorrupted(p_sid)  => state.with("corrupted", state.corrupted.union(Set(p_sid)))
+            | IwEnvironmentEffectUpdateRegistered(p_sid) => state.with("registered", state.registered.union(Set(p_sid)))
         }
     }
 
-    pure def IwEnvironmentInit : IwEnvironmentState = { registered : Set(), seen_round : Map() }
+    pure def IwEnvironmentInit : IwEnvironmentState = { registered : Set(), seen_round : Map(), corrupted : Set() }
 
     pure def IwEnvironmentRound(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
         [PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputRound) }))]
@@ -441,8 +454,14 @@ module iw {
         , EnvironmentIwEffect(IwEnvironmentEffectClearRounds) ]
     }
 
+    pure def IwEnvironmentCorrupt(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
+        [ SimulatorIwEffect(IwSimulatorEffectUpdateItm(ItmEffectUpdateInput(IwSimulatorInputCorrupt(p_sid))))
+        , EnvironmentIwEffect(IwEnvironmentEffectUpdateCorrupted(p_sid))]
+    }
+
     pure def IwEnvironmentReg(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
-         [PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputReg) }))]
+         [ PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputReg) }))
+         , EnvironmentIwEffect(IwEnvironmentEffectUpdateRegistered(p_sid))]
     }
 
     pure def IwEnvironmentAllRegistered(z : IwEnvironmentState) : bool = {
@@ -455,6 +474,7 @@ module iw {
             | IwEnvironmentActionRegister(p_sid) => if (z.registered.contains(p_sid)) [] else IwEnvironmentReg(p_sid)
             | IwEnvironmentActionSetOk(p_sid)    => if (IwEnvironmentAllRegistered(z)) IwEnvironmentOk(p_sid) else []
             | IwEnvironmentActionGetRound(p_sid) => if (IwEnvironmentAllRegistered(z)) IwEnvironmentRound(p_sid) else []
+            | IwEnvironmentActionCorrupt(p_sid)  => if (z.registered.contains(p_sid) and size(z.corrupted) < CorruptedBound) IwEnvironmentCorrupt(p_sid) else []
         }
     }
 
@@ -589,7 +609,8 @@ module iw {
                 nondet p_sid_z = oneOf(1.to(NumberOfParties))
                 nondet which_z = oneOf(Set( IwEnvironmentActionRegister(p_sid_z)
                                           , IwEnvironmentActionSetOk(p_sid_z)
-                                          , IwEnvironmentActionGetRound(p_sid_z)))
+                                          , IwEnvironmentActionGetRound(p_sid_z)
+                                          , IwEnvironmentActionCorrupt(p_sid_z)))
 
                 IwUpdate(IwEnvironmentTransition(which_z, Iw_Z, idle))
             }
@@ -605,10 +626,9 @@ module iw {
 
             | S_Sid => {
                 // Simulator
-                nondet p_sid_s = oneOf(1.to(NumberOfParties))
-                nondet which_s = oneOf(Set( IwSimulatorActionCorrupt(p_sid_s)
-                                          , IwSimulatorActionRoundRequest
-                                          , IwSimulatorActionRdIncoming))
+                nondet which_s = oneOf(Set( IwSimulatorActionRoundRequest
+                                          , IwSimulatorActionRdIncoming
+                                          , IwSimulatorActionRdInput))
 
                 IwUpdate(IwSimulatorTransition(which_s, Iw_S, idle))
             }
@@ -658,20 +678,20 @@ module iw {
     val RoundPastBound =
         Iw_GClock.current_round < MaxRound
 
-    val SeenRounds = 
+    val SeenRounds =
         size(Iw_Z.seen_round.keys()) < MaxRound
 
     // MUST PASS
     // ^^^^^^^^^
 
     // For correctness
-    val NoOverflow    = 
+    val NoOverflow    =
         not(Iw_overflow)
 
-    val RoundBounded  = 
+    val RoundBounded  =
         Iw_GClock.current_round <= MaxRound
 
-    // Property 1: Time Agreement: If two parties query the time and no OK requests have been sent 
+    // Property 1: Time Agreement: If two parties query the time and no OK requests have been sent
     // in the middle then G-clock responds with the same time.
     val TimeAgreement =
         Iw_Z.seen_round.keys().forall(p1 =>
@@ -728,7 +748,7 @@ module iw {
                                 }
                                 | _ => false
                             }
-                            
+
                         | _ => false
                     })
             | None => true
@@ -755,7 +775,7 @@ module rw {
     var Rw_Parties  : ()
 
     // Set when a step needed more than TapeSize slots on some tape.
-    var Iw_overflow : bool
+    var Rw_overflow : bool
 }
 
 // Main
