@@ -13,7 +13,7 @@ module assumptions {
 
     pure val MaxRound        = 5
 
-    pure val TapeSize         = 1
+    pure val TapeSize        = 1
 }
 
 module utils {
@@ -743,8 +743,6 @@ module iw {
 module rw {
     import uc.*
     import utils.*
-
-    
 }
 
 // Main

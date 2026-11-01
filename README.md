@@ -30,6 +30,8 @@ The ideal-world model has four main components:
 
 The G-Clock model is based on the _Crossing with Confidence: Formal Analysis and Model Checking of Blockchain Bridges_ paper. For party corruption, the adaptive-corruption approach from _Universally Composable Synchronous Computation_ was followed, where parties can be corrupted during execution rather than being fixed as corrupted from the start.
 
+![image](pseudocode/gclock.svg)
+
 The clock maintains a round counter, a set of registered parties, a set of corrupted parties, and a readiness flag (done) for each party.
 
 ### Properties
@@ -48,6 +50,8 @@ _If all registered parties are ready, then time advances. This is non-trivial si
 _If time advanced then all currently registered honest parties were ready._
 
 #### Results
+
+Tested on a M4 Macbook Air with 16GB of RAM using the TLC backend. 
 
 <table>
   <thead>
