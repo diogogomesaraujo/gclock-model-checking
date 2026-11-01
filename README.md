@@ -7,7 +7,7 @@
 
 ## About 
 
-This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _"From Ideal Clocks to Buildable Ones"_. The goal is to verify if a real-world distributed protocol, with all the problems that come with it, can satisfy the G-Clock ideal functionality.
+This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the G-Clock ideal functionality.
 
 ## UC-framework in Quint
 
