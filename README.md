@@ -7,11 +7,11 @@
 
 ## About 
 
-This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the G-Clock ideal functionality.
+This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the _G-Clock_ ideal functionality.
 
 ## UC-framework in Quint
 
-In Quint, we model each machine as a state record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
+In Quint, each machine was modelled as a state record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
 
 ### Read/Write rules
 - The environment can write to the parties’ input tapes, and parties can write to the environment’s output tape.
@@ -51,7 +51,7 @@ _If time advanced then all currently registered honest parties were ready._
 
 #### Results
 
-Tested on a M4 Macbook Air with 16GB of RAM using the TLC backend. 
+All tests were ran on a M4 Macbook Air with 16GB of RAM using the TLC backend and Quint 0.32.0. 
 
 <table>
   <thead>
@@ -96,7 +96,6 @@ Tested on a M4 Macbook Air with 16GB of RAM using the TLC backend.
 ## Real World
 
 Work in progress.
-
 
 ## References
 - [UC framework and rules](https://swayam-padhy.gitbook.io/)
