@@ -64,45 +64,76 @@
   line-numbers: true,
   line-numbers-format: x => [#x:],
   horizontal-offset: 1.63640em,
+  columns-count: 2,
   ..bits,
 ) = {
   let content = bits.pos().map(b => ast-to-content-list(0, b)).flatten()
   if content.len() == 0 or content == (none,) {
     return none
   }
-  let grid-bits = ()
-  let line-number = 1
 
+  let line-number = 1
   let indent-list = content.map(c => c.line-indent)
   let max-indent = indent-list.sorted().last()
   let colspans = indent-list.map(i => max-indent + 1 - i)
+
   let indent-content = indent-list.map(i => (
     ([], grid.vline(stroke: vstroke), []) * int(i / 2)
   ))
+
   let indents = (indent,) * max-indent
-  let offset = horizontal-offset + if indents.len() != 0 { indents.sum() }
+  let offset = horizontal-offset + if indents.len() != 0 {
+    indents.sum()
+  }
+
   let columns = (..indents, 100% - offset)
   if line-numbers {
     columns.insert(0, horizontal-offset)
   }
 
+  let grid-bits = ()
+
   while line-number <= content.len() {
+    let line = ()
+
     if line-numbers {
-      grid-bits.push(line-numbers-format(line-number))
+      line.push(line-numbers-format(line-number))
     }
-    grid-bits = grid-bits + indent-content.at(line-number - 1)
-    grid-bits.push(grid.cell(
+
+    line = line + indent-content.at(line-number - 1)
+
+    line.push(grid.cell(
       content.at(line-number - 1).line-content,
       colspan: colspans.at(line-number - 1),
     ))
+
+    grid-bits.push(line)
     line-number = line-number + 1
   }
-  return grid(
-    columns: columns,
-    // line spacing
-    inset: inset,
+
+  let rows-per-column = calc.ceil(content.len() / columns-count)
+
+  let result = ()
+
+  for column-index in range(columns-count) {
+    let start = column-index * rows-per-column
+    let end = calc.min(start + rows-per-column, content.len())
+
+    if start < content.len() {
+      result.push(grid(
+        columns: columns,
+        inset: inset,
+        stroke: none,
+        ..grid-bits.slice(start, end).flatten()
+      ))
+    }
+  }
+
+  grid(
+    columns: (1fr,) * columns-count,
+    column-gutter: 1em,
     stroke: none,
-    ..grid-bits
+    ..result
   )
 }
 

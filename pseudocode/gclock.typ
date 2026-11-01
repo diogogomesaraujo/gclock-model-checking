@@ -3,7 +3,6 @@
 #show: style-algorithm
 
 #set page(
-  width: auto,
   height: auto,
   margin: 20pt,
 )
