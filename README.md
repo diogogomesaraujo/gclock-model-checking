@@ -1,7 +1,7 @@
 <div align="center">
   <h3 align="center">gclock-model-checking</h3>
   <p align="center">
-    Model Checking the UC-realization of the Global Clock Ideal Functionality in Quint
+    Model-Checking the Realizability of the G-Clock Ideal Functionality in Quint
   </p>
 </div>
 
@@ -21,7 +21,7 @@ In Quint, each machine was modelled as a state record with input, output, and in
 ## Ideal World
 
 The ideal-world model has four main components:
-- **Environment (Z):** Registers parties and requests rounds or OK (on behalf of them).
+- **Environment (Z):** Registers parties and requests rounds or OK (on behalf of them) and can query the simulator to corrupt a parties.
 - **G-Clock:** Tracks registered parties, corruptions, readiness, and the current round.
 - **Simulator (S):** Requests round advances and party corruptions.
 - **Parties (P):** Forward requests to the clock and return its responses.

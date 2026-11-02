@@ -600,7 +600,7 @@ module iw {
     }
 
     action IwStep = all {
-        val idle = IwStayIdle(Iw_S, Iw_GClock, Iw_Parties)
+        val idle   = IwStayIdle(Iw_S, Iw_GClock, Iw_Parties)
         nondet who = oneOf(Set(Z_Sid, S_Sid, GClock_Sid, P_Sid(InvalidP_Sid)))
 
         match who {
@@ -685,10 +685,10 @@ module iw {
     // ^^^^^^^^^
 
     // For correctness
-    val NoOverflow    =
+    val NoOverflow =
         not(Iw_overflow)
 
-    val RoundBounded  =
+    val RoundBounded =
         Iw_GClock.current_round <= MaxRound
 
     // Property 1: Time Agreement: If two parties query the time and no OK requests have been sent
