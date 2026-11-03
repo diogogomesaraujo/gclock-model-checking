@@ -1,4 +1,4 @@
-#import "lib.typ" as algorithmic
+#import "../lib.typ" as algorithmic
 #import algorithmic: style-algorithm, algorithm-figure
 #show: style-algorithm
 

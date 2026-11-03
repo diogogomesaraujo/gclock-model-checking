@@ -653,7 +653,8 @@ module iw {
     }
 
     action IwUpdate(effects : Effects_t[IwEffect]) : bool = {
-        val w = effects.foldl({ z : Iw_Z, s : Iw_S, g : Iw_GClock, p : Iw_Parties }, (acc, e) => IwApplyEffect(acc, e))
+        val w = effects.foldl( { z : Iw_Z, s : Iw_S, g : Iw_GClock, p : Iw_Parties }
+                             , (acc, e) => IwApplyEffect(acc, e))
 
         if (IwWorldFits(w)) all {
             Iw_Z'        = w.z,
@@ -705,7 +706,7 @@ module iw {
             )
         )
 
-    // Property 2 (Time Liveness):  If all registered parties are ready, then time advances.
+    // Property 2 (Time Liveness):  If all registered honest parties are ready, then time advances.
     // this is non-trivial since we have to track who was registered and corrupted at all times
     val TimeLiveness =
         match Iw_prev_GClock {
@@ -779,7 +780,6 @@ module rw {
     var Rw_FBD      : ()
     var Rw_Parties  : ()
 
-    // Set when a step needed more than TapeSize slots on some tape.
     var Rw_overflow : bool
 }
 
