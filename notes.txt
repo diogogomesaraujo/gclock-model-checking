@@ -1,8 +1,10 @@
 TODO:
-- [ ] Model two ideal worlds:
-    - [ ] One where a party p1 is corrupted, p2 sends Ok and round advances.
-    - [ ] One where p1 is honest but silent, p2 sends Ok and the round does not advance.
-- [ ] Model two real worlds:
-    - [ ] One where p1 is corrupted and sends nothing.
-    - [ ] one where p1 is honest but never activated again.
+- A real world clock synchronization over a bounded-delay channel hybrid model.
+    - Use F_BD-SMT from the following paper: https://eprint.iacr.org/2011/310.pdf.
+- Model two ideal worlds:
+    - One where a party p1 is corrupted, p2 sends Ok and round advances.
+    - One where p1 is honest but silent, p2 sends Ok and the round does not advance.
+- Model two real worlds:
+    - One where p1 is corrupted and sends nothing.
+    - one where p1 is honest but never activated again.
 - p2 will see the same thing in the real world but different things in the ideal one.

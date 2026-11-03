@@ -1,7 +1,7 @@
 <div align="center">
   <h3 align="center">gclock-model-checking</h3>
   <p align="center">
-    Model-Checking the Realizability of the G-Clock Ideal Functionality in Quint
+    Model-Checking the Realizability of the G-Clock Ideal Functionality in the Real World with Quint
   </p>
 </div>
 
@@ -9,14 +9,32 @@
 
 This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the _G-Clock_ ideal functionality.
 
+## Verification (in progress)
+
+Let there be two honest parties P1 and P2 registered with G-Clock.
+
+We model two scenarios:
+- One where P1 is corrupted and P2 sends Ok to G-Clock.
+- Another where P1 is honest but silent and P2 sends Ok to G-Clock.
+
+Our model will prove that the environment Z can distinguish the ideal world's execution from the real one's by running the two scenarios since:
+- In the ideal world, G-Clock knows the corruption status of each party and will advance in the first case but not in the second. 
+- In the real world, modelling clock synchronization over bounded-delay channels, the rounds will be the same for both cases.
+
 ## UC-framework in Quint
 
-In Quint, each machine was modelled as a state record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
+In Quint, each machine was modelled as a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
 
 ### Read/Write rules
+#### Ideal World
 - The environment can write to the parties’ input tapes, and parties can write to the environment’s output tape.
-- The simulator can write to the parties’ incoming-message tapes. Conversely, parties can write to the simulator’s incoming-message tape, modeling leakage.
+- The simulator can write to F's incoming-message tape. Conversely, F can write to the simulator’s incoming-message tape, modelling leakage.
 - Parties can write to the global functionality’s input tape, and the functionality can write to the parties’ output tapes.
+
+#### Real World with Hybrid Execution
+- Parties can write to the input tape of dummy parties with id (pid, sid) and those dummy parties to the output tape of the parties. dummy parties can write to the input tape of F with sid and F to the output tape of the dummy parties. The adversary A can send messages to the incomming-messages tape of all of them and receive from them in its own.
+- A can write to the incomming-messages tape of the parties. Conversely, parties can write to the simulator’s incoming-message tape.
+- All other rules are similar to the ideal world ones.
 
 ## Ideal World
 
