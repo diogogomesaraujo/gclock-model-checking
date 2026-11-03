@@ -1,10 +1,5 @@
 TODO:
-- A real world clock synchronization over a bounded-delay channel hybrid model.
-    - Use F_BD-SMT from the following paper: https://eprint.iacr.org/2011/310.pdf.
-- Model two ideal worlds:
-    - One where a party p1 is corrupted, p2 sends Ok and round advances.
-    - One where p1 is honest but silent, p2 sends Ok and the round does not advance.
-- Model two real worlds:
-    - One where p1 is corrupted and sends nothing.
-    - one where p1 is honest but never activated again.
-- p2 will see the same thing in the real world but different things in the ideal one.
+- Logging in input output tapes of parties and in the environment output.
+- Z and S (and Z and A) together following the dummy adversary UC model.
+- model the timeSync real world protocol from A Universally Composable Treatment of Network Time.
+- verify there exist ZS such that: IDEAL_{S, Z}^{G_clock} and EXEC_{pi_timeSync, , ZA} executions are distinguishable.

@@ -9,18 +9,6 @@
 
 This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the _G-Clock_ ideal functionality.
 
-## Verification (in progress)
-
-Let there be two honest parties P1 and P2 registered with G-Clock.
-
-We model two scenarios:
-- One where P1 is corrupted and P2 sends Ok to G-Clock.
-- Another where P1 is honest but silent and P2 sends Ok to G-Clock.
-
-Our model will prove that the environment Z can distinguish the ideal world's execution from the real one's by running the two scenarios since:
-- In the ideal world, G-Clock knows the corruption status of each party and will advance in the first case but not in the second. 
-- In the real world, modelling clock synchronization over bounded-delay channels, the rounds will be the same for both cases.
-
 ## UC-framework in Quint
 
 In Quint, each machine was modelled as a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
