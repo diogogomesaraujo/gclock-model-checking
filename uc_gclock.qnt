@@ -595,7 +595,7 @@ module iw {
         Iw_Parties'  = IwPartiesInit,
         Iw_overflow' = false,
 
-        // for time soundness property
+        // for time liveness property
         Iw_prev_Z'       = None,
         Iw_prev_S'       = None,
         Iw_prev_GClock'  = None,
@@ -645,7 +645,7 @@ module iw {
             }
         },
 
-        // for time soundness property
+        // for time liveness property
         Iw_prev_Z'       = Some(Iw_Z),
         Iw_prev_S'       = Some(Iw_S),
         Iw_prev_GClock'  = Some(Iw_GClock),
@@ -694,7 +694,7 @@ module iw {
     val RoundBounded =
         Iw_GClock.current_round <= MaxRound
 
-    // Property 1: Time Agreement: If two parties query the time and no OK requests have been sent
+    // Property 1 (Time Agreement): If two parties query the time and no OK requests have been sent
     // in the middle then G-clock responds with the same time.
     val TimeAgreement =
         (size(Iw_Z.seen_round.keys()) > 0).implies(
@@ -738,7 +738,7 @@ module iw {
             | None => true
         }
 
-    // Property 3: TimeLiveness: If time advanced then all currently registered honest parties were ready.
+    // Property 3 (Time Soundness): If time advanced then all currently registered honest parties were ready.
     val TimeSoundness =
         match Iw_prev_GClock {
             | Some(pc) =>
