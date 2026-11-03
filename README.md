@@ -1,7 +1,7 @@
 <div align="center">
   <h3 align="center">gclock-model-checking</h3>
   <p align="center">
-    Model-Checking the Realizability of the G-Clock Ideal Functionality in the Real World with Quint
+    Model-Checking the UC-Realizability of the G-Clock Ideal Functionality in the Real World with Quint
   </p>
 </div>
 
