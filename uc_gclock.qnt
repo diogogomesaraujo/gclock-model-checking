@@ -3,8 +3,8 @@
 
 // -----------------------------------------------------------------
 
-// Utils
-// ^^^^^
+// Assumptions
+// ^^^^^^^^^^^
 
 module assumptions {
     pure val NumberOfParties = 2
@@ -16,6 +16,9 @@ module assumptions {
     pure val TapeSize        = 1
 }
 
+// Utils
+// ^^^^^
+//
 module utils {
     type Round_t = int
 
@@ -694,9 +697,11 @@ module iw {
     // Property 1: Time Agreement: If two parties query the time and no OK requests have been sent
     // in the middle then G-clock responds with the same time.
     val TimeAgreement =
-        Iw_Z.seen_round.keys().forall(p1 =>
-            Iw_Z.seen_round.keys().forall(p2 =>
-                Iw_Z.seen_round.get(p1) == Iw_Z.seen_round.get(p2)
+        (size(Iw_Z.seen_round.keys()) > 0).implies(
+            Iw_Z.seen_round.keys().forall(p1 =>
+                Iw_Z.seen_round.keys().forall(p2 =>
+                    Iw_Z.seen_round.get(p1) == Iw_Z.seen_round.get(p2)
+                )
             )
         )
 
