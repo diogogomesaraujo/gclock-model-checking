@@ -62,7 +62,7 @@ To prove the G-Clock's correctness, the following properties where checked (most
 _If two parties query the time and no OK requests have been sent in the middle then G-clock responds with the same time._
 
 #### Time Liveness
-_If all registered parties are ready, then time advances. This is non-trivial since we have to track who was registered and corrupted at all times._
+_If all registered honest parties are ready, then time advances._
 
 #### Time Soundness
 _If time advanced then all currently registered honest parties were ready._
