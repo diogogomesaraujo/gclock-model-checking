@@ -11,9 +11,16 @@ This project is being developed as part of my MsC thesis in Computer Science at 
 
 ## UC-framework in Quint
 
-In Quint, each machine was modelled as a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
+We follow the Dummy Adversary variant of UC where the definition of security is the following:
 
-The model also follows the dummy adversary variant of UC, where the adversary is simply a proxy for the environment.
+_We say that a protocol (\Pi) realizes a functionality (\mathcal{F}) with respect to the dummy adversary (\mathcal{A}D) if there exists an ideal-world simulator (\mathcal{S}) such that, for every environment (\mathcal{Z}),
+[
+\mathsf{IDEAL}{\mathcal{S},\mathcal{Z}}^{\mathcal{F}}
+\approx
+\mathsf{EXEC}_{\Pi,\mathcal{A}_D,\mathcal{Z}}.
+]_
+
+To model this in Quint, each machine has a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
 
 ### Read/Write rules
 #### Ideal World
