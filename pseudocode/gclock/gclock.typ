@@ -55,15 +55,6 @@
     )
     LineBreak
     Procedure(
-      [Sim$."Corrupt"$],
-      $P_"sid"$,
-      {
-        Comment[any sid]
-        Assign[$bold(C)$][$bold(C) union {P_"sid"}$]
-      },
-    )
-    LineBreak
-    Procedure(
       [$P_"sid"."Ok"$],
       (),
       {

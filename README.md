@@ -9,41 +9,40 @@
 
 This project is being developed as part of my MsC thesis in Computer Science at Faculdade de Ciências da Universidade do Porto, entitled _From Ideal Clocks to Buildable Ones_. The goal is to verify if real-world distributed protocols can satisfy the _G-Clock_ ideal functionality.
 
-## UC-framework in Quint
+## UC-framework
 
 We follow the Dummy Adversary variant of UC where the definition of security is the following:
 
-_We say that a protocol (\Pi) realizes a functionality (\mathcal{F}) with respect to the dummy adversary (\mathcal{A}D) if there exists an ideal-world simulator (\mathcal{S}) such that, for every environment (\mathcal{Z}),
-[
-\mathsf{IDEAL}{\mathcal{S},\mathcal{Z}}^{\mathcal{F}}
-\approx
-\mathsf{EXEC}_{\Pi,\mathcal{A}_D,\mathcal{Z}}.
-]_
+We say that a protocol Pi realizes a functionality F with respect to the dummy adversary A if there exists an ideal-world simulator S such that, for every environment Z: IDEAL(S, Z, F) ≈ EXEC(Pi, A, Z).
 
-To model this in Quint, each machine has a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
+### In Quint
 
-### Read/Write rules
-#### Ideal World
-- The environment can write to the parties’ input tapes, and parties can write to the environment’s output tape.
-- The simulator can write to F's incoming-message tape. Conversely, F can write to the simulator’s incoming-message tape, modelling leakage.
-- Parties can write to the global functionality’s input tape, and the functionality can write to the parties’ output tapes.
+To model this in Quint, each machine has a state record containing its input, output, and incoming-message tapes, along with a session identifier (sid):
 
-#### Real World with Hybrid Execution
-- Parties can write to the input tape of dummy parties with id (pid, sid) and those dummy parties to the output tape of the parties. dummy parties can write to the input tape of F with sid and F to the output tape of the dummy parties. The adversary A can send messages to the incomming-messages tape of all of them and receive from them in its own.
-- A can write to the incomming-messages tape of the parties. Conversely, parties can write to the simulator’s incoming-message tape.
-- All other rules are similar to the ideal world ones.
+```quint
+type ITM[in, out, in_msg] = {
+    sid                : Sid_t,
+    input              : List[in],
+    output             : List[out],
+    incoming_messages  : List[in_msg],
+}
+```
+
+Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it:
+- All communication received from the protocol participants are forwarded directly to the environment Z. That is, when A receives incoming m from party P, it simply writes "received m from P" on the subroutine tape of Z.
+- It sends messages from the adversary to the parties, as directed. That is, when A receives "send m to P" from Z, it writes m on the incoming message tape of party P.
+- Parties can write directly to the global functionality’s input tape, and the functionality can write to the parties’ output tapes.
 
 ## Ideal World
 
-The ideal-world model has four main components:
-- **Environment (Z):** Registers parties and requests rounds or OK (on behalf of them) and can query the simulator to corrupt a parties.
+The ideal-world model has three main components:
+- **Environment (ZS):** Registers parties, submits Round and OK requests on behalf of the parties, and coordinates the simulator by forwarding messages between them and the G-Clock functionality.
 - **G-Clock:** Tracks registered parties, corruptions, readiness, and the current round.
-- **Simulator (S):** Requests round advances and party corruptions.
 - **Parties (P):** Forward requests to the clock and return its responses.
 
 ### G-Clock
 
-The G-Clock model is based on the _Crossing with Confidence: Formal Analysis and Model Checking of Blockchain Bridges_ paper. For party corruption, the adaptive-corruption approach from _Universally Composable Synchronous Computation_ was followed, where parties can be corrupted during execution rather than being fixed as corrupted from the start.
+The G-Clock ideal functionality is the same as the one from _Crossing with Confidence: Formal Analysis and Model Checking of Blockchain Bridges_:
 
 ![image](pseudocode/gclock/gclock.svg)
 
