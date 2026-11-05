@@ -13,6 +13,8 @@ This project is being developed as part of my MsC thesis in Computer Science at 
 
 In Quint, each machine was modelled as a record with input, output, and incoming-message tapes. Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it.
 
+The model also follows the dummy adversary variant of UC, where the adversary is simply a proxy for the environment.
+
 ### Read/Write rules
 #### Ideal World
 - The environment can write to the parties’ input tapes, and parties can write to the environment’s output tape.
