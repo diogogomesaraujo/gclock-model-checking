@@ -50,8 +50,7 @@ The clock maintains a round counter, a set of registered parties, a set of corru
 
 ### Properties
 
-To prove the G-Clock's correctness, the following properties where checked (mostly based on the _Crossing with Confidence: Formal_ paper).
-
+To prove the G-Clock's correctness, the following properties where checked (mostly based on the previously mentioned paper).
 
 #### Time Agreement
 
