@@ -11,9 +11,11 @@ module assumptions {
 
     pure val Corrupted       = Set(1)
 
-    pure val MaxRound        = 10
+    pure val MaxRound        = 5
 
     pure val TapeSize        = 1
+
+    pure val LogsSize        = 10
 }
 
 // Utils
@@ -272,11 +274,13 @@ module iw {
         if (not(clock.registered_parties.contains(p_sid))) {
             [PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid, effect : ItmEffectUpdateOutput(IwPartiesOutputFailed) }))]
         } else {
-            if (not((clock.registered_parties.exclude(clock.corrupted_parties))
-                        .exists(sid => clock.done.put(p_sid, One).get(sid) == Zero)))
-                clock.done.keys().exclude(clock.corrupted_parties).fold([], (acc, k) =>
-                        acc.append(GClockIwEffect(IwClockEffectUpdateDone({ p_sid : k, flag : Zero }))))
-                    .append(GClockIwEffect(IwClockEffectIncrementRound))
+        if (not((clock.registered_parties.exclude(clock.corrupted_parties))
+                    .exists(sid => clock.done.put(p_sid, One).get(sid) == Zero)))
+            clock.done.keys().exclude(clock.corrupted_parties).fold([], (acc, k) =>
+                    acc.append(GClockIwEffect(IwClockEffectUpdateDone({ p_sid : k, flag : Zero }))))
+                       .append(GClockIwEffect(IwClockEffectIncrementRound))
+                       .append(PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid
+                                                                        , effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })))
             else [ GClockIwEffect(IwClockEffectUpdateDone({ p_sid : p_sid, flag : One }))
                  , EnvSimIwEffect(IwEnvSimEffectLog(IwLogRoundOk(p_sid)))
                  , PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid, effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })) ]
@@ -320,8 +324,13 @@ module iw {
     // Environment and Simulator
     // ^^^^^^^^^^^^^^^^^^^^^^^^^
 
+    type IwEnvSimLog = {
+        index : int,
+        log : IwLog
+    }
+
     type IwEnvSimState = {
-        log : List[IwLog]
+        logs : Set[IwEnvSimLog]
     }
 
     type IwEnvSimEffect = IwEnvSimEffectLog(IwLog)
@@ -330,13 +339,25 @@ module iw {
                         | IwEnvSimActionGetRound(P_Sid_t)
                         | IwEnvSimActionRegister(P_Sid_t)
 
+    pure def IwEnvSimNewLog(log : IwLog, logs : Set[IwEnvSimLog]) : IwEnvSimLog =
+        { index : size(logs), log : log }
+
+    pure def IwEnvSimLogPush(logs: Set[IwEnvSimLog], l: IwLog): Set[IwEnvSimLog] =
+        if (size(logs) >= LogsSize) {
+            val kept = logs.filter(x => x.index > 0)
+                           .map(x => { index: x.index - 1, log: x.log })
+            kept.union(Set({ index: size(kept), log: l }))
+        } else {
+            logs.union(Set({ index: size(logs), log: l }))
+        }
+
     pure def IwEnvSimApplyEffect(state : IwEnvSimState, effect : IwEnvSimEffect) : IwEnvSimState = {
         match effect {
-            | IwEnvSimEffectLog(l) => state.with("log", state.log.append(l))
+            | IwEnvSimEffectLog(l) => state.with("logs", IwEnvSimLogPush(state.logs, l))
         }
     }
 
-    pure def IwEnvSimInit : IwEnvSimState = { log : [] }
+    pure def IwEnvSimInit : IwEnvSimState = { logs : Set() }
 
     pure def IwEnvSimRound(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
         [PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputRound) }))]
@@ -352,14 +373,14 @@ module iw {
     }
 
     pure def IwEnvSimAllRegistered(zs : IwEnvSimState) : bool = {
-        size((zs.log.foldl(Set(), (acc, l) => match l {
+        size((zs.logs.fold(Set(), (acc, l) => match l.log {
             | IwLogRegOk(p_sid) => acc.union(Set(p_sid))
             | _                 => acc
         }))) >= NumberOfParties
     }
 
     pure def IwEnvSimRegistered(zs : IwEnvSimState, p_sid : P_Sid_t) : bool = {
-        zs.log.foldl(false, (acc, l) => match l {
+        zs.logs.fold(false, (acc, l) => match l.log {
             | IwLogRegOk(p) => acc or (p == p_sid)
             | _ => acc
         })
@@ -562,14 +583,34 @@ module iw {
 
     // Property 1 (Time Agreement): If two parties query the time and no OK requests have been sent
     // in the middle then G-clock responds with the same time.
-    // val TimeAgreement =
-    //     (size(Iw_ZS.seen_round.keys()) > 0).implies(
-    //         Iw_ZS.seen_round.keys().forall(p1 =>
-    //             Iw_ZS.seen_round.keys().forall(p2 =>
-    //                 Iw_ZS.seen_round.get(p1) == Iw_ZS.seen_round.get(p2)
-    //             )
-    //         )
-    //     )
+    val TimeAgreement =
+       Iw_ZS.logs.forall(l1 =>
+            match l1.log {
+                | IwLogPRound(r1) => {
+                    Iw_ZS.logs.forall(l2 =>
+                        match l2.log {
+                            | IwLogPRound(r2) =>
+                                (l2.index > l1.index) implies {
+                                    val no_ok_between = Iw_ZS.logs.forall(lm =>
+                                        and { lm.index > l1.index, lm.index < l2.index } implies {
+                                            match lm.log {
+                                                | IwLogRoundOk(_) => false
+                                                | _               => true
+                                            }
+                                        }
+                                    )
+
+                                    no_ok_between implies {
+                                        r1.round == r2.round
+                                    }
+                                }
+                            | _ => true
+                        }
+                    )
+                }
+                | _ => true
+            }
+       )
 
     // Property 2 (Time Liveness):  If all registered honest parties are ready, then time advances.
     // this is non-trivial since we have to track who was registered and corrupted at all times
