@@ -49,6 +49,10 @@ module utils {
     // ^^^^^
 
     type Effects_t[a] = List[a]
+
+    // ^^^^^
+
+    pure def min(a: int, b: int): int = if (a < b) a else b
 }
 
 // UC Framework
@@ -241,6 +245,18 @@ module iw {
         }
     }
 
+    pure def IwClockCreateEnvSimLog(state : IwClockState, log : IwLog) : IwEffect =
+        EnvSimIwEffect(IwEnvSimEffectLog({
+            log   : log,
+            reg   : state.registered_parties,
+            c     : state.corrupted_parties,
+            ok    : state.done.keys().fold(Set(), (acc, d) =>
+                        if (state.done.get(d) == One) acc.union(Set(d))
+                        else acc
+                    ),
+            round : state.current_round
+        } ))
+
     pure def IwClockInit : IwClockState = {
         itm                : ItmInit(GClock_Sid),
         current_round      : FirstRound,
@@ -267,7 +283,7 @@ module iw {
     }
 
     pure def IwClockSimulatorRound(clock : IwClockState) : Effects_t[IwEffect] = {
-        [EnvSimIwEffect(IwEnvSimEffectLog(IwLogSRound(clock.current_round)))]
+        [IwClockCreateEnvSimLog(clock, IwLogSRound(clock.current_round))]
     }
 
     pure def IwClockOk(clock : IwClockState, p_sid : P_Sid_t) : Effects_t[IwEffect] = {
@@ -282,7 +298,7 @@ module iw {
                        .append(PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid
                                                                         , effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })))
             else [ GClockIwEffect(IwClockEffectUpdateDone({ p_sid : p_sid, flag : One }))
-                 , EnvSimIwEffect(IwEnvSimEffectLog(IwLogRoundOk(p_sid)))
+                 , IwClockCreateEnvSimLog(clock, IwLogRoundOk(p_sid))
                  , PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid, effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })) ]
         }
     }
@@ -326,34 +342,38 @@ module iw {
 
     type IwEnvSimLog = {
         index : int,
-        log : IwLog
+        log   : IwLog,
+        reg   : Set[P_Sid_t],
+        c     : Set[P_Sid_t],
+        ok    : Set[P_Sid_t],
+        round : Round_t
     }
 
     type IwEnvSimState = {
         logs : Set[IwEnvSimLog]
     }
 
-    type IwEnvSimEffect = IwEnvSimEffectLog(IwLog)
+    type IwEnvSimEffect = IwEnvSimEffectLog({ log : IwLog, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t })
 
     type IwEnvSimAction = IwEnvSimActionSetOk(P_Sid_t)
                         | IwEnvSimActionGetRound(P_Sid_t)
                         | IwEnvSimActionRegister(P_Sid_t)
 
-    pure def IwEnvSimNewLog(log : IwLog, logs : Set[IwEnvSimLog]) : IwEnvSimLog =
-        { index : size(logs), log : log }
+    pure def IwEnvSimNewLog(log : IwLog, index : int, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t) : IwEnvSimLog =
+        { index : index, log : log, reg : reg, c : c, ok : ok, round : round }
 
-    pure def IwEnvSimLogPush(logs: Set[IwEnvSimLog], l: IwLog): Set[IwEnvSimLog] =
+    pure def IwEnvSimLogPush(logs: Set[IwEnvSimLog], l: IwLog, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t) : Set[IwEnvSimLog] =
         if (size(logs) >= LogsSize) {
             val kept = logs.filter(x => x.index > 0)
-                           .map(x => { index: x.index - 1, log: x.log })
-            kept.union(Set({ index: size(kept), log: l }))
+                           .map(x => { index: x.index - 1, log : x.log, reg : x.reg, c : x.c, ok : x.ok, round : x.round })
+            kept.union(Set(IwEnvSimNewLog(l, size(kept), reg, c, ok, round)))
         } else {
-            logs.union(Set({ index: size(logs), log: l }))
+            logs.union(Set(IwEnvSimNewLog(l, size(logs), reg, c, ok, round)))
         }
 
     pure def IwEnvSimApplyEffect(state : IwEnvSimState, effect : IwEnvSimEffect) : IwEnvSimState = {
         match effect {
-            | IwEnvSimEffectLog(l) => state.with("logs", IwEnvSimLogPush(state.logs, l))
+            | IwEnvSimEffectLog(r) => state.with("logs", IwEnvSimLogPush(state.logs, r.log, r.reg, r.c, r.ok, r.round))
         }
     }
 
@@ -367,9 +387,9 @@ module iw {
         [ PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputOk) })) ]
     }
 
-    pure def IwEnvSimReg(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
+    pure def IwEnvSimReg(p_sid : P_Sid_t, clock : IwClockState) : Effects_t[IwEffect] = {
          [ PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputReg) }))
-         , EnvSimIwEffect(IwEnvSimEffectLog(IwLogReg(p_sid)))]
+         , IwClockCreateEnvSimLog(clock, IwLogReg(p_sid))]
     }
 
     pure def IwEnvSimAllRegistered(zs : IwEnvSimState) : bool = {
@@ -386,10 +406,10 @@ module iw {
         })
     }
 
-    pure def IwEnvSimTransition(which : IwEnvSimAction, zs : IwEnvSimState, idle : bool) : Effects_t[IwEffect] = {
+    pure def IwEnvSimTransition(which : IwEnvSimAction, zs : IwEnvSimState, idle : bool, clock : IwClockState) : Effects_t[IwEffect] = {
         if (not(idle)) []
         else match which {
-            | IwEnvSimActionRegister(p_sid) => if (IwEnvSimRegistered(zs, p_sid)) [] else IwEnvSimReg(p_sid)
+            | IwEnvSimActionRegister(p_sid) => if (IwEnvSimRegistered(zs, p_sid)) [] else IwEnvSimReg(p_sid, clock)
             | IwEnvSimActionSetOk(p_sid)    => if (IwEnvSimAllRegistered(zs)) IwEnvSimOk(p_sid) else []
             | IwEnvSimActionGetRound(p_sid) => if (IwEnvSimAllRegistered(zs)) IwEnvSimRound(p_sid) else []
         }
@@ -451,23 +471,23 @@ module iw {
         [GClockIwEffect(IwClockEffectUpdateItm(ItmEffectUpdateInput(IwClockInputRound(p_sid))))]
     }
 
-    pure def IwPartiesRoundToZ(p_sid : P_Sid_t, round : Round_t) : Effects_t[IwEffect] = {
-        [EnvSimIwEffect(IwEnvSimEffectLog(IwLogPRound({ p_sid : p_sid, round : round })))]
+    pure def IwPartiesRoundToZ(p_sid : P_Sid_t, round : Round_t, clock : IwClockState) : Effects_t[IwEffect] = {
+        [IwClockCreateEnvSimLog(clock, IwLogPRound({ p_sid : p_sid, round : round }))]
     }
 
     pure def IwPartiesOk(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
         [GClockIwEffect(IwClockEffectUpdateItm(ItmEffectUpdateInput(IwClockInputOk(p_sid))))]
     }
 
-    pure def IwPartiesMaybeOkToZ(p_sid : P_Sid_t, response : IwPartiesOutput) : Effects_t[IwEffect] = {
-        [EnvSimIwEffect(IwEnvSimEffectLog(match response {
+    pure def IwPartiesMaybeOkToZ(p_sid : P_Sid_t, response : IwPartiesOutput, clock : IwClockState) : Effects_t[IwEffect] = {
+        [IwClockCreateEnvSimLog(clock, match response {
                                                         | IwPartiesOutputRoundOk    => IwLogRoundOk(p_sid)
                                                         | IwPartiesOutputRegisterOk => IwLogRegOk(p_sid)
                                                         | IwPartiesOutputFailed     => IwLogFailed(p_sid)
-                                                        | _                         => IwLogFailed(p_sid)}))]
+                                                        | _                         => IwLogFailed(p_sid)})]
     }
 
-    pure def IwPartiesTransition(which : IwPartiesAction, p_sid : P_Sid_t, parties : IwPartiesState) : Effects_t[IwEffect] = {
+    pure def IwPartiesTransition(which : IwPartiesAction, p_sid : P_Sid_t, parties : IwPartiesState, clock : IwClockState) : Effects_t[IwEffect] = {
         match which {
             | IwPartiesActionRdInput    => {
                 match ReadNewInput(parties.get(p_sid).itm) {
@@ -485,10 +505,10 @@ module iw {
                 match ReadNewOutput(parties.get(p_sid).itm) {
                     | Some(output_message) => {
                         (match output_message {
-                            | IwPartiesOutputRound(r)   => IwPartiesRoundToZ(p_sid, r)
-                            | IwPartiesOutputFailed     => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputFailed)
-                            | IwPartiesOutputRegisterOk => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputRegisterOk)
-                            | IwPartiesOutputRoundOk    => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputRoundOk)
+                            | IwPartiesOutputRound(r)   => IwPartiesRoundToZ(p_sid, r, clock)
+                            | IwPartiesOutputFailed     => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputFailed, clock)
+                            | IwPartiesOutputRegisterOk => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputRegisterOk, clock)
+                            | IwPartiesOutputRoundOk    => IwPartiesMaybeOkToZ(p_sid, IwPartiesOutputRoundOk, clock)
                         }).append(PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid, effect : ItmEffectPopOutput })))
                     }
                     | None => []
@@ -521,7 +541,7 @@ module iw {
                                           , IwEnvSimActionSetOk(p_sid_z)
                                           , IwEnvSimActionGetRound(p_sid_z)))
 
-                IwUpdate(IwEnvSimTransition(which_z, Iw_ZS, idle))
+                IwUpdate(IwEnvSimTransition(which_z, Iw_ZS, idle, Iw_GClock))
             }
 
             | P_Sid(_) => {
@@ -530,7 +550,7 @@ module iw {
                                           , IwPartiesActionRdInput ))
                 nondet p_sid_p = oneOf(1.to(NumberOfParties))
 
-                IwUpdate(IwPartiesTransition(which_p, p_sid_p, Iw_Parties))
+                IwUpdate(IwPartiesTransition(which_p, p_sid_p, Iw_Parties, Iw_GClock))
             }
 
             | GClock_Sid => {
@@ -614,57 +634,46 @@ module iw {
 
     // Property 2 (Time Liveness):  If all registered honest parties are ready, then time advances.
     // this is non-trivial since we have to track who was registered and corrupted at all times
-//     val TimeLiveness =
-//         match Iw_prev_GClock {
-//             | Some(pc) =>
-//                 match ReadNewInput(pc.itm) {
-//                     | Some(i) =>
-//                         match i {
-//                             | IwClockInputOk(p) =>
-//                                 and {
-//                                     // to make sure it checks cases where the message was consumed after
-//                                     length(pc.itm.input) == 1,
-//                                     length(Iw_GClock.itm.input) == 0,
-//
-//                                     // because at the max round it saturates
-//                                     pc.current_round < MaxRound,
-//
-//                                     pc.registered_parties.contains(p),
-//                                     pc.registered_parties
-//                                         .exclude(pc.corrupted_parties)
-//                                         .forall(q =>
-//                                             q == p or pc.done.get(q) == One
-//                                         )
-//                                 }.implies(
-//                                Iw_GClock.current_round == pc.current_round + 1
-//                                 )
-//                             | _ => true
-//                         }
-//                     | _ => true
-//                 }
-//             | None => true
-//         }
+    val TimeLiveness =
+        Iw_ZS.logs.forall(l2 =>
+            Iw_ZS.logs.forall(l1 =>
+                (l1.index + 1 == l2.index) implies
+                match l2.log {
+                    | IwLogRoundOk(p) => {
+                        val honest = l2.reg.exclude(l2.c)
+                        val all_ready = and {
+                            honest.size() > 0,
+                            honest.forall(q => l2.ok.contains(q) or q == p),
+                        }
+                        all_ready implies (l2.round == min(l1.round + 1, MaxRound))
+                    }
+                    | _ => true
+                }
+            )
+        )
 
     // Property 3 (Time Soundness): If time advanced then all currently registered honest parties were ready.
-//     val TimeSoundness =
-//         match Iw_prev_GClock {
-//             | Some(pc) =>
-//                 (pc.current_round < Iw_GClock.current_round).implies(
-//                     match ReadNewInput(pc.itm) {
-//                         | Some(i) =>
-//                             match i {
-//                                 | IwClockInputOk(p) => and {
-//                                     pc.registered_parties.contains(p),
-//                                     pc.registered_parties.exclude(pc.corrupted_parties)
-//                                         .forall(q => q == p or pc.done.get(q) == One),
-//                                 }
-//                                 | _ => false
-//                             }
-//
-//                         | _ => false
-//                     })
-//             | None => true
-//         }
+    val TimeSoundness =
+        Iw_ZS.logs.forall(l2 =>
+            Iw_ZS.logs.forall(l1 =>
+                and { l1.index + 1 == l2.index, l2.round > l1.round } implies
+                match l2.log {
+                    | IwLogRoundOk(p) => {
+                        val honest = l2.reg.exclude(l2.c)
+                        val all_ready = and {
+                            honest.size() > 0,
+                            honest.forall(q => l2.ok.contains(q) or q == p),
+                        }
+                        and {
+                            all_ready,
+                            l2.round == l1.round + 1,
+                            l2.ok.exclude(l2.c) == Set(),
+                        }
+                    }
+                    | _ => false
+                }
+            )
+        )
 }
 
 // -----------------------------------------------------------------

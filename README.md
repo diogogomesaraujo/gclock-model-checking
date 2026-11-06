@@ -73,6 +73,7 @@ All tests were ran on a M4 Macbook Air with 16GB of RAM using the TLC backend an
       <th>Parties</th>
       <th>Corrupted</th>
       <th>Rounds</th>
+      <th>Logs</th>
       <th>Verification Time</th>
       <th>Distinct States Generated</th>
     </tr>
@@ -83,24 +84,27 @@ All tests were ran on a M4 Macbook Air with 16GB of RAM using the TLC backend an
       <td>3</td>
       <td>1</td>
       <td>5</td>
-      <td>21s</td>
-      <td>492 928</td>
+      <td>10</td>
+      <td>2m 20s</td>
+      <td>6 141 787</td>
     </tr>
     <tr>
       <td>Time Liveness</td>
       <td>3</td>
       <td>1</td>
       <td>5</td>
-      <td>21s</td>
-      <td>492 928</td>
+      <td>10</td>
+      <td>2m 20s</td>
+      <td>6 141 787</td>
     </tr>
     <tr>
       <td>Time Soundness</td>
       <td>3</td>
       <td>1</td>
       <td>5</td>
-      <td>21s</td>
-      <td>492 928</td>
+      <td>10</td>
+      <td>2m 20s</td>
+      <td>6 141 787</td>
     </tr>
   </tbody>
 </table>
