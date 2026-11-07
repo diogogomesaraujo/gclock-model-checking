@@ -1,5 +1,3 @@
 TODO:
-- Logging in input output tapes of parties and in the environment output.
-- Z and S (and Z and A) together following the dummy adversary UC model.
 - model the timeSync real world protocol from A Universally Composable Treatment of Network Time.
 - verify there exist ZS such that: IDEAL_{S, Z}^{G_clock} and EXEC_{pi_timeSync, , ZA} executions are distinguishable.
