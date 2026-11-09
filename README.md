@@ -13,9 +13,10 @@ This project is being developed as part of my MsC thesis in Computer Science at 
 
 We follow the Dummy Adversary variant of UC where the definition of security is the following:
 
-We say that a protocol Pi realizes a functionality F with respect to the dummy adversary A if there exists an ideal-world simulator S such that, for every environment Z: IDEAL(S, Z, F) ≈ EXEC(Pi, A, Z).
+We say that a protocol Pi realizes a functionality F with respect to the dummy adversary A if there exists an ideal-world simulator S such that, for every environment Z: 
+```IDEAL(S, Z, F) ≈ EXEC(Pi, A, Z)```.
 
-Our goal is to prove that the real world protocols, such as [Pi_timeSync](https://eprint.iacr.org/2017/1256.pdf) do not satisfy this security definition with respect to the [G-Clock](https://eprint.iacr.org/2026/292.pdf) ideal functionality. In particular, we aim to prove that there exists no simulator S such that, for every environment Z: IDEAL(S, Z, G-Clock) ≄ EXEC(Pi_timeSync, A, Z).
+Our goal is to prove that the real world protocols, such as [Pi_timeSync](https://eprint.iacr.org/2017/1256.pdf) do not satisfy this security definition with respect to the [G-Clock](https://eprint.iacr.org/2026/292.pdf) ideal functionality. In particular, we aim to prove that there exists no simulator S such that, for every environment Z: ```IDEAL(S, Z, G-Clock) ≉ EXEC(Pi_timeSync, A, Z)```.
 
 ### In Quint
 
