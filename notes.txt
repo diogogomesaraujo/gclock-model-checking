@@ -1,3 +1,8 @@
 TODO:
 - model the timeSync real world protocol from A Universally Composable Treatment of Network Time.
+    - model F_timer that will have n instances. one for each party.
+    - model the G-Clock (and G-refClock) from the paper.
+    - the F-auth functionality will be embbeded into the way components interact.
+    - environment interactions should be the same as in the ideal world model.
+    - run properties for the real world and see if they break.
 - verify there exist ZS such that: IDEAL_{S, Z}^{G_clock} and EXEC_{pi_timeSync, , ZA} executions are distinguishable.

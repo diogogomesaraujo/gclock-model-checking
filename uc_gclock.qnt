@@ -30,8 +30,6 @@ module utils {
 
     type P_Sid_t = int
 
-    type Sid_t = ZS_Sid | P_Sid(P_Sid_t) | GClock_Sid
-
     pure def InvalidP_Sid : int = -1
 
     // ^^^^^
@@ -52,7 +50,8 @@ module utils {
 
     // ^^^^^
 
-    pure def min(a: int, b: int): int = if (a < b) a else b
+    pure def min(a: int, b: int): int =
+        if (a < b) a else b
 }
 
 // UC Framework
@@ -62,8 +61,8 @@ module uc {
     import utils.*
     import assumptions.*
 
-    type ITM[in, out, in_msg] = {
-        sid                : Sid_t,
+    type ITM[sid, in, out, in_msg] = {
+        sid                : sid,
         input              : List[in],
         output             : List[out],
         incoming_messages  : List[in_msg],
@@ -76,7 +75,7 @@ module uc {
                                     | ItmEffectPopOutput
                                     | ItmEffectPopIncoming
 
-    pure def ItmInit(sid: Sid_t) : ITM[in, out, incoming] = {
+    pure def ItmInit(sid: sid) : ITM[sid, in, out, incoming] = {
         sid               : sid,
         input             : [],
         output            : [],
@@ -87,7 +86,7 @@ module uc {
         if (length(tape) == 0) tape else tape.tail()
     }
 
-    pure def ItmApplyEffect(itm : ITM[in, out, incoming], effect : ItmEffect[in, out, incoming]) : ITM[in, out, incoming] = {
+    pure def ItmApplyEffect(itm : ITM[sid, in, out, incoming], effect : ItmEffect[in, out, incoming]) : ITM[sid, in, out, incoming] = {
         match (effect) {
             | ItmEffectUpdateInput(msg)    => itm.with("input", itm.input.append(msg))
             | ItmEffectUpdateOutput(msg)   => itm.with("output", itm.output.append(msg))
@@ -115,7 +114,7 @@ module uc {
         ReadNew(itm.incoming_messages)
     }
 
-    pure def ItmIsEmpty(itm : ITM[in, out, incoming]) : bool = {
+    pure def ItmIsEmpty(itm : ITM[sid, in, out, incoming]) : bool = {
         and {
             length(itm.input) == 0,
             length(itm.output) == 0,
@@ -123,7 +122,7 @@ module uc {
         }
     }
 
-    pure def ItmFits(itm : ITM[in, out, incoming]) : bool = {
+    pure def ItmFits(itm : ITM[sid, in, out, incoming]) : bool = {
         and {
             length(itm.input) <= TapeSize,
             length(itm.output) <= TapeSize,
@@ -146,6 +145,10 @@ module iw {
 
     // Globals
     // ^^^^^^^
+
+    type Iw_Sid_t = Iw_ZS_Sid | Iw_P_Sid(P_Sid_t) | Iw_GClock_Sid
+
+    type IwItm[in, out, incoming] = ITM[Iw_Sid_t, in, out, incoming]
 
     var Iw_ZS        : IwEnvSimState
     var Iw_GClock   : IwClockState
@@ -217,7 +220,7 @@ module iw {
     type IwClockIncoming = IwClockIncomingRound             // in the paper Sim.Round() but adapted to the real world model
                          | IwClockIncomingCorrupt(P_Sid_t)  // modelling corruptions like Universally Composable Synchronous Computation instead
 
-    type IwClockITM = ITM[IwClockInput, IwClockOutput, IwClockIncoming]
+    type IwClockITM = IwItm[IwClockInput, IwClockOutput, IwClockIncoming]
 
     type IwClockState = {
         itm                : IwClockITM,
@@ -258,7 +261,7 @@ module iw {
         } ))
 
     pure def IwClockInit : IwClockState = {
-        itm                : ItmInit(GClock_Sid),
+        itm                : ItmInit(Iw_GClock_Sid),
         current_round      : FirstRound,
         registered_parties : Set(),
         corrupted_parties  : Corrupted,
@@ -431,7 +434,7 @@ module iw {
 
     type IwPartiesIncoming = ()
 
-    type IwPartyITM = ITM[IwPartiesInput, IwPartiesOutput, IwPartiesIncoming]
+    type IwPartyITM = IwItm[IwPartiesInput, IwPartiesOutput, IwPartiesIncoming]
 
     type IwPartyState = {
         itm : IwPartyITM,
@@ -441,7 +444,7 @@ module iw {
 
     pure def Iw_get_p_sid(p : IwPartyState) : P_Sid_t = {
         match (p.itm.sid) {
-            | P_Sid(p_sid) => p_sid
+            | Iw_P_Sid(p_sid) => p_sid
             | _            => InvalidP_Sid
         }
     }
@@ -458,7 +461,7 @@ module iw {
 
     // Action called by Z.
     // It initializes P's state.
-    pure def IwPartiesInit : IwPartiesState = 1.to(NumberOfParties).mapBy(i => ({ itm : ItmInit(P_Sid(i)) }))
+    pure def IwPartiesInit : IwPartiesState = 1.to(NumberOfParties).mapBy(i => ({ itm : ItmInit(Iw_P_Sid(i)) }))
 
     // Action called by the party when receiving Reg from Z on
     // the input-tape.
@@ -523,7 +526,7 @@ module iw {
     // ^^^^
 
     action IwInit = all {
-        Iw_ZS'        = IwEnvSimInit,
+        Iw_ZS'       = IwEnvSimInit,
         Iw_GClock'   = IwClockInit,
         Iw_Parties'  = IwPartiesInit,
         Iw_overflow' = false
@@ -531,10 +534,10 @@ module iw {
 
     action IwStep = {
         val idle   = IwStayIdle(Iw_GClock, Iw_Parties)
-        nondet who = oneOf(Set(ZS_Sid, GClock_Sid, P_Sid(InvalidP_Sid)))
+        nondet who = oneOf(Set(Iw_ZS_Sid, Iw_GClock_Sid, Iw_P_Sid(InvalidP_Sid)))
 
         match who {
-            | ZS_Sid => {
+            | Iw_ZS_Sid => {
                 // Environment and Simulator
                 nondet p_sid_z = oneOf(1.to(NumberOfParties))
                 nondet which_z = oneOf(Set( IwEnvSimActionRegister(p_sid_z)
@@ -544,7 +547,7 @@ module iw {
                 IwUpdate(IwEnvSimTransition(which_z, Iw_ZS, idle, Iw_GClock))
             }
 
-            | P_Sid(_) => {
+            | Iw_P_Sid(_) => {
                 // Parties
                 nondet which_p = oneOf(Set( IwPartiesActionRdOutput
                                           , IwPartiesActionRdInput ))
@@ -553,7 +556,7 @@ module iw {
                 IwUpdate(IwPartiesTransition(which_p, p_sid_p, Iw_Parties, Iw_GClock))
             }
 
-            | GClock_Sid => {
+            | Iw_GClock_Sid => {
                 // GClock
                 nondet which_g = oneOf(Set( IwClockActionRdInput
                                           , IwClockActionRdIncoming ))
@@ -690,12 +693,17 @@ module rw {
     // Globals
     // ^^^^^^^
 
-    var Rw_Z        : ()
-    var Rw_A        : ()
-    var Rw_FBD      : ()
-    var Rw_Parties  : ()
+    // should map party id to a timer
+    var Rw_FTimers   : ()
 
-    var Rw_overflow : bool
+    // should have a fixed delay
+    var Rw_GClock    : ()
+
+    var Rw_GRefClock : ()
+
+    var Rw_Parties   : ()
+
+    var Rw_overflow  : bool
 }
 
 // Main
