@@ -1,8 +1,25 @@
-TODO:
-- model the timeSync real world protocol from A Universally Composable Treatment of Network Time.
-    - model F_timer that will have n instances. one for each party.
-    - model the G-Clock (and G-refClock) from the paper.
-    - the F-auth functionality will be embbeded into the way components interact.
-    - environment interactions should be the same as in the ideal world model.
-    - run properties for the real world and see if they break.
-- verify there exist ZS such that: IDEAL_{S, Z}^{G_clock} and EXEC_{pi_timeSync, , ZA} executions are distinguishable.
+Pi_roundSync
+^^^^^^^^^^^^
+start_round(round):
+    for each peer in P:
+        send round_message to peer via F_bd_smt
+    send "RoundOK" to F_clock
+
+poll_and_advance():
+    while not received_all_messages_for(round):
+        for each peer in P:
+            msg = fetch_from_channel(peer)
+            if msg is not null:
+                received[peer][round] = msg
+    round = round + 1
+    output ("RoundComplete", round)
+
+---
+
+Distinguisher Strategy
+^^^^^^^^^^^^^^^^^^^^^^
+1. Send inputs for Round 1 to all honest parties.
+2. Instruct network channel F_bd_smt to delay messages by max delay (delta).
+3. Observe when Party P_2 outputs Round 2:
+   - If P_2 advances at step 1     --> Ideal World (F_clock)
+   - If P_2 hangs until step delta --> Real World (Network delay)

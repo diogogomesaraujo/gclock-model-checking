@@ -9,13 +9,19 @@
 module assumptions {
     pure val NumberOfParties = 2
 
-    pure val Corrupted       = Set(1)
+    pure val Corrupted       = Set()
 
     pure val MaxRound        = 5
 
     pure val TapeSize        = 1
 
-    pure val LogsSize        = 10
+    pure val LogsSize        = 4
+
+    pure val Delta           = 2
+
+    pure val MaxDrift        = 1
+
+    pure val TimeoutLocal    = 2
 }
 
 // Utils
@@ -154,7 +160,6 @@ module iw {
     var Iw_GClock   : IwClockState
     var Iw_Parties  : IwPartiesState
 
-    // Set when a step needed more than TapeSize slots on some tape.
     var Iw_overflow : bool
 
     // -----------------------------------------------------------------
@@ -582,39 +587,286 @@ module iw {
             Iw_overflow' = true
         }
     }
+}
+
+// -----------------------------------------------------------------
+
+// Real-world Model
+// ^^^^^^^^^^^^^^^^
+
+module rw {
+    import uc.*
+    import utils.*
+    import assumptions.*
+    import iw.*
 
     // -----------------------------------------------------------------
 
-    // Properties
-    // ^^^^^^^^^^
+    // Globals
+    // ^^^^^^^
 
-    // MUST FAIL
-    // ^^^^^^^^^
+    var Rw_ZS        : IwEnvSimState
+    var Rw_Parties   : P_Sid_t -> RwPartyState
+    var Rw_Diffuse   : Set[RwDiffMsg]
+    var Rw_Time      : int
+    var Rw_overflow  : bool
 
-    val RoundPastBound =
-        Iw_GClock.current_round < MaxRound
+    // -----------------------------------------------------------------
 
-    // MUST PASS
-    // ^^^^^^^^^
+    // Parties
+    // ^^^^^^^
 
-    // For correctness
-    val NoOverflow =
-        not(Iw_overflow)
+    type RwInput    = RwInputReg | RwInputRound | RwInputOk
 
-    val RoundBounded =
-        Iw_GClock.current_round <= MaxRound
+    type RwOutput   = RwOutputRound(Round_t)
+                    | RwOutputRegisterOk
+                    | RwOutputRoundOk
+                    | RwOutputFailed
+
+    type RwIncoming = RwIncomingOk({ from : P_Sid_t, round : Round_t })
+
+    type RwPartyITM = ITM[P_Sid_t, RwInput, RwOutput, RwIncoming]
+
+    type RwPartyState = {
+        itm        : RwPartyITM,
+        registered : bool,
+        round      : Round_t,
+        ok_sent    : bool,
+        received   : Set[(P_Sid_t, Round_t)],
+        local      : int,
+        ok_local   : int
+    }
+
+    type RwDiffMsg = { from : P_Sid_t, to : P_Sid_t, round : Round_t, sent_at : int }
+
+    type RwPartiesAction = RwPartiesActionRdInput | RwPartiesActionRdIncoming | RwPartiesActionRdOutput
+
+    type RwWorld = {
+        zs      : IwEnvSimState,
+        parties : P_Sid_t -> RwPartyState,
+        diffuse : Set[RwDiffMsg],
+        time    : int,
+    }
+
+    pure def RwAllParties : Set[P_Sid_t] = 1.to(NumberOfParties)
+
+    pure def RwPartiesInit : P_Sid_t -> RwPartyState =
+        RwAllParties.mapBy(i => {
+            itm        : ItmInit(i),
+            registered : false,
+            round      : FirstRound,
+            ok_sent    : false,
+            received   : Set(),
+            local      : 0,
+            ok_local   : 0
+        })
+
+    pure def RwOut(p : RwPartyState, o : RwOutput) : RwPartyState =
+        p.with("itm", ItmApplyEffect(p.itm, ItmEffectUpdateOutput(o)))
+
+    pure def RwPop(p : RwPartyState, e : ItmEffect[RwInput, RwOutput, RwIncoming]) : RwPartyState =
+        p.with("itm", ItmApplyEffect(p.itm, e))
+
+    pure def RwAdvance(p : RwPartyState) : RwPartyState =
+        if (p.round < MaxRound) p.with("round", p.round + 1).with("ok_sent", false) else p
+
+    pure def RwMaybeAdvance(p : RwPartyState) : RwPartyState =
+        if (p.ok_sent and RwAllParties.forall(q => p.received.contains((q, p.round)))) RwAdvance(p) else p
+
+    pure def RwMaybeTimeout(p : RwPartyState) : RwPartyState =
+        if (p.ok_sent and (p.local - p.ok_local >= TimeoutLocal)) RwAdvance(p) else p
+
+    pure def RwSetParty(w : RwWorld, p_sid : P_Sid_t, p : RwPartyState) : RwWorld =
+        w.with("parties", w.parties.put(p_sid, p))
+
+    pure def RwPartyTransition(which : RwPartiesAction, p_sid : P_Sid_t, w : RwWorld) : RwWorld = {
+        val p = w.parties.get(p_sid)
+        match which {
+            | RwPartiesActionRdInput => {
+                match ReadNewInput(p.itm) {
+                    | None => w
+                    | Some(inp) => {
+                        val q = RwPop(p, ItmEffectPopInput)
+                        match inp {
+                            | RwInputReg   => RwSetParty(w, p_sid, RwOut(q.with("registered", true), RwOutputRegisterOk))
+                            | RwInputRound => RwSetParty(w, p_sid, RwOut(q, RwOutputRound(q.round)))
+                            | RwInputOk    =>
+                                if (not(q.registered)) RwSetParty(w, p_sid, RwOut(q, RwOutputFailed))
+                                else if (q.ok_sent)    RwSetParty(w, p_sid, RwOut(q, RwOutputRoundOk))
+                                else {
+                                    val sent = q.with("ok_sent", true)
+                                                .with("ok_local", q.local)
+                                                .with("received", q.received.union(Set((p_sid, q.round))))
+                                    val msgs = RwAllParties.exclude(Set(p_sid)).map(t =>
+                                                   { from : p_sid, to : t, round : q.round, sent_at : w.time })
+                                    RwSetParty(w, p_sid, RwOut(RwMaybeAdvance(sent), RwOutputRoundOk))
+                                        .with("diffuse", w.diffuse.union(msgs))
+                                }
+                        }
+                    }
+                }
+            }
+            | RwPartiesActionRdIncoming => {
+                match ReadNewIncoming(p.itm) {
+                    | None => w
+                    | Some(msg) => {
+                        val q = RwPop(p, ItmEffectPopIncoming)
+                        match msg {
+                            | RwIncomingOk(m) =>
+                                RwSetParty(w, p_sid, RwMaybeAdvance(q.with("received", q.received.union(Set((m.from, m.round))))))
+                        }
+                    }
+                }
+            }
+            | RwPartiesActionRdOutput => {
+                match ReadNewOutput(p.itm) {
+                    | None => w
+                    | Some(o) => {
+                        val lg = match o {
+                            | RwOutputRound(r)   => IwLogPRound({ p_sid : p_sid, round : r })
+                            | RwOutputRegisterOk => IwLogRegOk(p_sid)
+                            | RwOutputRoundOk    => IwLogRoundOk(p_sid)
+                            | RwOutputFailed     => IwLogFailed(p_sid)
+                        }
+                        // Z only sees party outputs: reg/ok/round fields are ideal-world
+                        // bookkeeping that Z cannot observe, so they are left empty.
+                        RwSetParty(w, p_sid, RwPop(p, ItmEffectPopOutput))
+                            .with("zs", { logs : IwEnvSimLogPush(w.zs.logs, lg, Set(), Corrupted, Set(), 0) })
+                    }
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+
+    // Environment and Simulator
+    // ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    type RwZAction = RwZRegister(P_Sid_t)
+                   | RwZSetOk(P_Sid_t)
+                   | RwZGetRound(P_Sid_t)
+                   | RwZDeliver(RwDiffMsg)
+                   | RwZTickLocal(P_Sid_t)
+                   | RwZAdvanceTime
+
+    pure def RwIdle(w : RwWorld) : bool =
+        w.parties.keys().forall(k => ItmIsEmpty(w.parties.get(k).itm))
+
+    pure def RwWorldFits(w : RwWorld) : bool =
+        w.parties.keys().forall(k => ItmFits(w.parties.get(k).itm))
+
+    pure def RwZActions(w : RwWorld) : Set[RwZAction] =
+        RwAllParties.map(i => RwZRegister(i))
+            .union(RwAllParties.map(i => RwZSetOk(i)))
+            .union(RwAllParties.map(i => RwZGetRound(i)))
+            .union(RwAllParties.map(i => RwZTickLocal(i)))
+            .union(w.diffuse.map(m => RwZDeliver(m)))
+            .union(Set(RwZAdvanceTime))
+
+    pure def RwCanAdvanceTime(w : RwWorld) : bool = and {
+        w.time < MaxRound,
+        w.diffuse.forall(m => w.time + 1 - m.sent_at <= Delta),
+        w.parties.keys().forall(k => w.parties.get(k).local >= w.time + 1 - MaxDrift),
+    }
+
+    pure def RwZInput(w : RwWorld, p_sid : P_Sid_t, i : RwInput) : RwWorld =
+        RwSetParty(w, p_sid, w.parties.get(p_sid).with("itm", ItmApplyEffect(w.parties.get(p_sid).itm, ItmEffectUpdateInput(i))))
+
+    pure def RwZTransition(a : RwZAction, w : RwWorld) : RwWorld =
+        if (not(RwIdle(w))) w
+        else match a {
+            | RwZRegister(p) =>
+                if (IwEnvSimRegistered(w.zs, p)) w
+                else RwZInput(w, p, RwInputReg)
+                       .with("zs", { logs : IwEnvSimLogPush(w.zs.logs, IwLogReg(p), Set(), Corrupted, Set(), 0) })
+            | RwZSetOk(p) =>
+                if (IwEnvSimAllRegistered(w.zs)) RwZInput(w, p, RwInputOk) else w
+            | RwZGetRound(p) =>
+                if (IwEnvSimAllRegistered(w.zs)) RwZInput(w, p, RwInputRound) else w
+            | RwZDeliver(m) =>
+                RwSetParty(w, m.to, w.parties.get(m.to).with("itm",
+                        ItmApplyEffect(w.parties.get(m.to).itm,
+                                       ItmEffectUpdateIncoming(RwIncomingOk({ from : m.from, round : m.round })))))
+                    .with("diffuse", w.diffuse.exclude(Set(m)))
+            | RwZTickLocal(p) =>
+                if (w.parties.get(p).local + 1 - w.time <= MaxDrift)
+                    RwSetParty(w, p, RwMaybeTimeout(w.parties.get(p).with("local", w.parties.get(p).local + 1)))
+                else w
+            | RwZAdvanceTime =>
+                if (RwCanAdvanceTime(w)) w.with("time", w.time + 1) else w
+        }
+
+    // -----------------------------------------------------------------
+
+    // Main
+    // ^^^^
+
+    action RwInit = all {
+        Rw_ZS'       = IwEnvSimInit,
+        Rw_Parties'  = RwPartiesInit,
+        Rw_Diffuse'  = Set(),
+        Rw_Time'     = 0,
+        Rw_overflow' = false
+    }
+
+    action RwUpdate(w : RwWorld) : bool =
+        if (RwWorldFits(w)) all {
+            Rw_ZS'       = w.zs,
+            Rw_Parties'  = w.parties,
+            Rw_Diffuse'  = w.diffuse,
+            Rw_Time'     = w.time,
+            Rw_overflow' = Rw_overflow
+        } else all {
+            Rw_ZS'       = Rw_ZS,
+            Rw_Parties'  = Rw_Parties,
+            Rw_Diffuse'  = Rw_Diffuse,
+            Rw_Time'     = Rw_Time,
+            Rw_overflow' = true
+        }
+
+    action RwStep = {
+        val w = { zs : Rw_ZS, parties : Rw_Parties, diffuse : Rw_Diffuse, time : Rw_Time }
+        any {
+            all {
+                nondet which_z = oneOf(RwZActions(w))
+                RwUpdate(RwZTransition(which_z, w))
+            },
+            all {
+                nondet p_sid   = oneOf(RwAllParties)
+                nondet which_p = oneOf(Set( RwPartiesActionRdInput
+                                          , RwPartiesActionRdIncoming
+                                          , RwPartiesActionRdOutput ))
+                RwUpdate(RwPartyTransition(which_p, p_sid, w))
+            }
+        }
+    }
+}
+
+module properties {
+
+    import uc.*
+    import iw.*
+    import rw.*
+    import utils.*
+    import assumptions.*
+
+    // -----------------------------------------------------------------
+
+    // Main Properties
+    // ^^^^^^^^^^^^^^^
 
     // Property 1 (Time Agreement): If two parties query the time and no OK requests have been sent
     // in the middle then G-clock responds with the same time.
-    val TimeAgreement =
-       Iw_ZS.logs.forall(l1 =>
+    pure def TimeAgreementOn(logs : Set[IwEnvSimLog]) : bool =
+        logs.forall(l1 =>
             match l1.log {
                 | IwLogPRound(r1) => {
-                    Iw_ZS.logs.forall(l2 =>
+                    logs.forall(l2 =>
                         match l2.log {
                             | IwLogPRound(r2) =>
                                 (l2.index > l1.index) implies {
-                                    val no_ok_between = Iw_ZS.logs.forall(lm =>
+                                    val no_ok_between = logs.forall(lm =>
                                         and { lm.index > l1.index, lm.index < l2.index } implies {
                                             match lm.log {
                                                 | IwLogRoundOk(_) => false
@@ -633,13 +885,13 @@ module iw {
                 }
                 | _ => true
             }
-       )
+        )
 
     // Property 2 (Time Liveness):  If all registered honest parties are ready, then time advances.
     // this is non-trivial since we have to track who was registered and corrupted at all times
-    val TimeLiveness =
-        Iw_ZS.logs.forall(l2 =>
-            Iw_ZS.logs.forall(l1 =>
+    pure def TimeLivenessOn(logs: Set[IwEnvSimLog]) : bool =
+        logs.forall(l2 =>
+            logs.forall(l1 =>
                 (l1.index + 1 == l2.index) implies
                 match l2.log {
                     | IwLogRoundOk(p) => {
@@ -656,9 +908,9 @@ module iw {
         )
 
     // Property 3 (Time Soundness): If time advanced then all currently registered honest parties were ready.
-    val TimeSoundness =
-        Iw_ZS.logs.forall(l2 =>
-            Iw_ZS.logs.forall(l1 =>
+    pure def TimeSoundnessOn(logs: Set[IwEnvSimLog]) : bool =
+        logs.forall(l2 =>
+            logs.forall(l1 =>
                 and { l1.index + 1 == l2.index, l2.round > l1.round } implies
                 match l2.log {
                     | IwLogRoundOk(p) => {
@@ -666,8 +918,8 @@ module iw {
                         val all_ready = and {
                             honest.size() > 0,
                             honest.forall(q => l2.ok.contains(q) or q == p),
-                        }
-                        and {
+                            }
+                            and {
                             all_ready,
                             l2.round == l1.round + 1,
                             l2.ok.exclude(l2.c) == Set(),
@@ -677,40 +929,61 @@ module iw {
                 }
             )
         )
-}
-
-// -----------------------------------------------------------------
-
-// Real-world Model
-// ^^^^^^^^^^^^^^^^
-
-module rw {
-    import uc.*
-    import utils.*
 
     // -----------------------------------------------------------------
 
-    // Globals
-    // ^^^^^^^
+    // Ideal World
+    // ^^^^^^^^^^^
 
-    // should map party id to a timer
-    var Rw_FTimers   : ()
+    // MUST PASS
+    // ^^^^^^^^^
 
-    // should have a fixed delay
-    var Rw_GClock    : ()
+    val NoOverflow =
+        not(Iw_overflow)
 
-    var Rw_GRefClock : ()
+    val RoundBounded =
+        Iw_GClock.current_round <= MaxRound
 
-    var Rw_Parties   : ()
+    val IwTimeSoundness =
+        TimeSoundnessOn(Iw_ZS.logs)
 
-    var Rw_overflow  : bool
+    val IwTimeLiveness =
+        TimeLivenessOn(Iw_ZS.logs)
+
+    val IwTimeAgreement =
+        TimeAgreementOn(Iw_ZS.logs)
+
+    // MUST FAIL
+    // ^^^^^^^^^
+
+    val RoundPastBound =
+        Iw_GClock.current_round < MaxRound
+
+    // -----------------------------------------------------------------
+
+    // Real World
+    // ^^^^^^^^^^
+
+    // MUST PASS
+    val RwNoOverflow = not(Rw_overflow)
+
+
+    val RwTimeSoundness =
+        TimeSoundnessOn(Rw_ZS.logs)
+
+    val RwTimeLiveness =
+        TimeLivenessOn(Rw_ZS.logs)
+
+    val RwTimeAgreement =
+        TimeAgreementOn(Rw_ZS.logs)
 }
 
 // Main
 // ^^^^
 
-module uc_gclock {
+module uc_gclock_iw {
     import iw.*
+    import properties.*
 
     action init = all {
         IwInit
@@ -718,5 +991,18 @@ module uc_gclock {
 
     action step = all {
         IwStep
+    }
+}
+
+module uc_gclock_rw {
+    import rw.*
+    import properties.*
+
+    action init = all {
+        RwInit
+    }
+
+    action step = all {
+        RwStep
     }
 }
