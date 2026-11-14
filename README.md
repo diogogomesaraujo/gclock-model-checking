@@ -34,7 +34,7 @@ type ITM[in, out, in_msg] = {
 Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it:
 - All communication received from the protocol participants are forwarded directly to the environment Z. That is, when A receives incoming m from party P, it simply writes "received m from P" on the subroutine tape of Z.
 - It sends messages from the adversary to the parties, as directed. That is, when A receives "send m to P" from Z, it writes m on the incoming message tape of party P.
-- Parties can write directly to the global functionality’s input tape, and the functionality can write to the parties’ output tapes.
+- Parties can write directly to the global functionality's input tape, and the functionality can write to the parties’ output tapes.
 
 ## Ideal World
 
@@ -67,7 +67,7 @@ _If time advanced then all currently registered honest parties were ready._
 
 #### Results
 
-All tests were ran on a M4 Macbook Air with 16GB of RAM using the TLC backend and Quint 0.32.0. 
+All tests were run on an M4 Macbook Air with 16GB of RAM using the TLC backend and Quint 0.32.0. 
 
 <table>
   <thead>
@@ -115,10 +115,27 @@ All tests were ran on a M4 Macbook Air with 16GB of RAM using the TLC backend an
 
 ## Real World
 
+### Relative Time Protocol
+
+The synchronization protocol chosen was the Relative Time Protocol from _Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_ as it is a faithful representation of how to partially synchronize peers in a distributed setting. 
+
+Work in progress.
+
+### Hybrid Model
+
+Parties run the Real Time Protocol in a {F_Local, F_Diffuse, G_refRate}-hybrid world. The functionalities can be found in the paper previously mentioned.
+
 Work in progress.
 
 ## References
-- [UC framework and rules](https://swayam-padhy.gitbook.io/)
-- [GClock Model Cheching](https://eprint.iacr.org/2026/292.pdf)
-- [UC Synchrony and adaptive corruption](https://eprint.iacr.org/2011/310.pdf)
-- [Quint cheatsheet](https://quint.sh/quint-cheatsheet.pdf)
+
+### Literature
+- [_Crossing with Confidence: Formal Analysis and Model Checking of Blockchain Bridges_](https://eprint.iacr.org/2026/292.pdf)
+- [_Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_](https://eprint.iacr.org/2019/942.pdf)
+- [_Universally Composable Synchronous Computation_](https://eprint.iacr.org/2011/310.pdf)
+- [_Universally Composable Security: A New Paradigm for Cryptographic Protocols_](https://eprint.iacr.org/2000/067.pdf)
+
+### Documentation
+- [Swayam's Blog](https://swayam-padhy.gitbook.io/)
+- [Quint Cheatsheet](https://quint.sh/quint-cheatsheet.pdf)
+- [Typst Docs](https://typst.app/docs/)
