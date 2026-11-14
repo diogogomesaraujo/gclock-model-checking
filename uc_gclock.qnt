@@ -695,7 +695,11 @@ module rw {
     import utils.*
     import assumptions.*
 
-    type Rw_Sid_t = Rw_ZS_Sid | Rw_P_Sid(P_Sid_t) | Rw_FLocal(P_Sid_t)
+    type Rw_Sid_t = Rw_ZS_Sid
+                  | Rw_P_Sid(P_Sid_t)
+                  | Rw_FLocal_Sid(P_Sid_t)
+                  | Rw_FDDiffuse_Sid(P_Sid_t)
+                  | Rw_GrefRate_Sid
 
     type RwItm[in, out, incoming] = ITM[Rw_Sid_t, in, out, incoming]
 
@@ -723,39 +727,64 @@ module rw {
         local_counter   : Time_t,
         local_counter_z : Time_t,
         clock_drift     : Time_t,
-        itm             : RwItm[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming]
+        itm             : RwItm[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming],
+        is_registered   : bool
     }
 
     type RwFLocalsState = P_Sid_t -> RwFLocalState
 
     type RwFLocalsEffect = RwFLocalsEffectZIncrease(P_Sid_t)
                          | RwFLocalsEffectIncrease(P_Sid_t)
-                         | RwFLocalsUpdateClockDrift(P_Sid_t)
-                         | RwFLocalsUpdateItm({ p_sid: P_Sid_t, effect : ItmEffect })
+                         | RwFLocalsEffectUpdateClockDrift(P_Sid_t)
+                         | RwFLocalsEffectUpdateItm({ p_sid: P_Sid_t, effect : ItmEffect })
+                         | RwFLocalsEffectSetRegistered
 
     pure def RwFLocalsInit() : RwFLocalsState =
         1.to(NumberOfParties).mapBy(i => ({ local_counter : TimeInit
                                           , local_counter_z : TimeInit
                                           , clock_drift : 0
-                                          , itm : ItmInit(Rw_FLocal(i)) }))
+                                          , itm : ItmInit(Rw_FLocal_Sid(i))
+                                          , is_registered : false }))
 
     // -----------------------------------------------------------------
 
     // F_DDiffuse
     // ^^^^^^^^^^
 
-    type RwFDDiffuseInput = RwFDDiffuseInputFetch
-                          | RwFDDiffuseInputDiffuse({ message : RwBlock, timestamp : Time_t })
+    type RwFDDiffuseMessage = {
+        sender        : P_Sid_t,
+        message       : RwBlock,
+        timestamp     : Time_t,
+        is_registered : bool
+    }
 
-    type RwFDDiffuseOutput = ()
+    type RwFDDiffuseInput = RwFDDiffuseInputFetch
+                          | RwFDDiffuseInputDiffuse(RwFDDiffuseMessage)
+
+    type RwFDDiffuseOutput = | RwFDDiffuseOutputRegistered
 
     type RwFDDiffuseIncoming = ()
 
     type RwFDDiffuseState = {
         clock : Time_t,
-        inbox : (RwFLocalInput, Time_t),
-        itm   : RwItm[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming]
+        inbox : List[RwFDDiffuseMessage],
+        itm   : RwItm[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming],
+        is_registered : bool
     }
+
+    type RwFDDiffusesState = P_Sid_t -> RwFDDiffuseState
+
+    type RwFDDiffusesEffect = RwFDDiffusesEffectIncrement(P_Sid_t)
+                            | RwFDDiffusesEffectAddInbox({ p_sid : P_Sid_t, message : RwFDDiffuseMessage })
+                            | RwFDDiffusesEffectRemainingInbox({ p_sid : P_Sid_t })
+                            | RwFDDiffusesEffectSetRegistered
+                            | RwFDDiffuseEffectUpdateItm(ItmEffect)
+
+    pure def RwFDDiffusesInit() : RwFDDiffusesState =
+        1.to(NumberOfParties).mapBy(i => ({ clock         : TimeInit
+                                          , inbox         : []
+                                          , itm           : ItmInit(Rw_FDDiffuse_Sid(i))
+                                          , is_registered : false }))
 
     // -----------------------------------------------------------------
 
@@ -774,10 +803,44 @@ module rw {
         itm        : RwItm[RwGrefRateInput, RwGrefRateOutput, RwGrefRateIncoming]
     }
 
+    type RwGrefRateEffect = RwGrefRateEffectRegister(Rw_Sid_t)
+                          | RwGrefRateEffectIncrement
+                          | RwGrefRateEffectUpdateItm(ItmEffect)
+
+    pure def RwGrefRateInit() : RwGrefRateState = {
+        registered : Set(),
+        itm : ItmInit(Rw_GrefRate_Sid)
+    }
+
     // -----------------------------------------------------------------
 
     // Relative Time Protocol
     // ^^^^^^^^^^^^^^^^^^^^^^
+
+    type RwPartyInput = ()
+
+    type RwPartyOutput = | RwPartyInputCurrentTime(Time_t)
+
+    type RwPartyIncoming = ()
+
+    type RwReferencePoint = {
+        round : Round_t,
+        time : Time_t
+    }
+
+    type RwPartyState = {
+        reference_point : RwReferencePoint,
+        itm  : RwItm[RwPartyInput, RwPartyOutput, RwPartyIncoming]
+    }
+
+    type RwPartiesState = P_Sid_t -> RwPartyState
+
+    type RwPartiesEffect = RwPartiesEffectUpdateReference(RwReferencePoint)
+                         | RwPartiesEffectsUpdateItm(ItmEffect)
+
+    pure def RwPartiesInit() : RwPartiesState =
+        1.to(NumberOfParties).mapBy(i => ({ reference_point : { round : FirstRound, time : TimeInit }
+                                          , itm             : ItmInit(Rw_P_Sid(i))}))
 }
 
 // Main
