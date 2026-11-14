@@ -16,6 +16,8 @@ module assumptions {
     pure val TapeSize        = 1
 
     pure val LogsSize        = 10
+
+    pure val RoundDuration   = 1
 }
 
 // Utils
@@ -24,7 +26,11 @@ module assumptions {
 module utils {
     type Round_t = int
 
+    type Time_t = int
+
     pure def FirstRound : int = 0
+
+    pure def TimeInit   : int = 0
 
     // ^^^^^
 
@@ -687,23 +693,49 @@ module iw {
 module rw {
     import uc.*
     import utils.*
+    import assumptions.*
+
+    type Rw_Sid_t = Rw_ZS_Sid | Rw_P_Sid(P_Sid_t) | Rw_FLocal(P_Sid_t)
+
+    type RwItm[in, out, incoming] = ITM[Rw_Sid_t, in, out, incoming]
 
     // -----------------------------------------------------------------
 
-    // Globals
+    // Hybrid Functionalities
+    // ^^^^^^^^^^^^^^^^^^^^^^
+
+    // -----------------------------------------------------------------
+
+    // F_Local
     // ^^^^^^^
 
-    // should map party id to a timer
-    var Rw_FTimers   : ()
+    type RwFLocalInput = RwFLocalInputZIncrease // increases local_clock_z
+                        | RwFLocalInputContinue // increases local_clock
+                        | RwFLocalInputGetClock
 
-    // should have a fixed delay
-    var Rw_GClock    : ()
+    type RwFLocalOutput = | RwFLocalOutputRegistered
 
-    var Rw_GRefClock : ()
+    type RwFLocalIncoming = ()
 
-    var Rw_Parties   : ()
+    type RwFLocalState = {
+        local_counter   : Time_t,
+        local_counter_z : Time_t,
+        clock_drift     : Time_t,
+        itm             : RwItm[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming]
+    }
 
-    var Rw_overflow  : bool
+    type RwFLocalsState = P_Sid_t -> RwFLocalState
+
+    type RwFLocalsEffect = RwFLocalsEffectZIncrease(P_Sid_t)
+                         | RwFLocalsEffectIncrease(P_Sid_t)
+                         | RwFLocalsUpdateClockDrift(P_Sid_t)
+                         | RwFLocalsUpdateItm({ p_sid: P_Sid_t, effect : ItmEffect })
+
+    pure def RwFLocalsInit() : RwFLocalsState =
+        1.to(NumberOfParties).mapBy(i => ({ local_counter : TimeInit
+                                          , local_counter_z : TimeInit
+                                          , clock_drift : 0
+                                          , itm : ItmInit(Rw_FLocal(i)) }))
 }
 
 // Main
