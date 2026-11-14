@@ -117,13 +117,13 @@ All tests were run on an M4 Macbook Air with 16GB of RAM using the TLC backend a
 
 ### Relative Time Protocol
 
-The synchronization protocol chosen was the Relative Time Protocol from _Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_ as it is a faithful representation of how to partially synchronize peers in a distributed setting. 
+The synchronization protocol chosen was the Relative Time Protocol from _Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_ as it is a faithful representation of how blockchains synchronize nodes using the proposed blocks' timestamps. 
 
 Work in progress.
 
 ### Hybrid Model
 
-Parties run the Real Time Protocol in a {F_Local, F_Diffuse, G_refRate}-hybrid world. The functionalities can be found in the paper previously mentioned.
+Parties run the Real Time Protocol in a {F_Local, F_Diffuse, G_refRate}-hybrid world (the functionalities can be found in the paper previously mentioned).
 
 Work in progress.
 
