@@ -704,16 +704,18 @@ module rw {
     // Hybrid Functionalities
     // ^^^^^^^^^^^^^^^^^^^^^^
 
+    type RwBlock = ()
+
     // -----------------------------------------------------------------
 
     // F_Local
     // ^^^^^^^
 
     type RwFLocalInput = RwFLocalInputZIncrease // increases local_clock_z
-                        | RwFLocalInputContinue // increases local_clock
-                        | RwFLocalInputGetClock
+                       | RwFLocalInputGetClock
 
-    type RwFLocalOutput = | RwFLocalOutputRegistered
+    type RwFLocalOutput = RwFLocalOutputRegistered
+                        | RwFLocalInputContinue // increases local_clock
 
     type RwFLocalIncoming = ()
 
@@ -736,6 +738,46 @@ module rw {
                                           , local_counter_z : TimeInit
                                           , clock_drift : 0
                                           , itm : ItmInit(Rw_FLocal(i)) }))
+
+    // -----------------------------------------------------------------
+
+    // F_DDiffuse
+    // ^^^^^^^^^^
+
+    type RwFDDiffuseInput = RwFDDiffuseInputFetch
+                          | RwFDDiffuseInputDiffuse({ message : RwBlock, timestamp : Time_t })
+
+    type RwFDDiffuseOutput = ()
+
+    type RwFDDiffuseIncoming = ()
+
+    type RwFDDiffuseState = {
+        clock : Time_t,
+        inbox : (RwFLocalInput, Time_t),
+        itm   : RwItm[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming]
+    }
+
+    // -----------------------------------------------------------------
+
+    // G_refRate
+    // ^^^^^^^^^
+
+    type RwGrefRateInput = RwGrefRateInputRegister(Rw_Sid_t)
+                         | RwGrefRateInputContinue
+
+    type RwGrefRateOutput = ()
+
+    type RwGrefRateIncoming = ()
+
+    type RwGrefRateState = {
+        registered : Set[Rw_Sid_t],
+        itm        : RwItm[RwGrefRateInput, RwGrefRateOutput, RwGrefRateIncoming]
+    }
+
+    // -----------------------------------------------------------------
+
+    // Relative Time Protocol
+    // ^^^^^^^^^^^^^^^^^^^^^^
 }
 
 // Main
