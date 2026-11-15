@@ -135,6 +135,9 @@ Work in progress.
 - [_Universally Composable Synchronous Computation_](https://eprint.iacr.org/2011/310.pdf)
 - [_Universally Composable Security: A New Paradigm for Cryptographic Protocols_](https://eprint.iacr.org/2000/067.pdf)
 
+### Repositories
+- [UC Model Checking in Quint](https://github.com/input-output-hk/uc_model_checking)
+
 ### Documentation
 - [Swayam's Blog](https://swayam-padhy.gitbook.io/)
 - [Quint Cheatsheet](https://quint.sh/quint-cheatsheet.pdf)
