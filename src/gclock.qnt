@@ -1,151 +1,14 @@
-// Model Checking G-Clock
-// from: https://eprint.iacr.org/2026/292.pdf
-
 // -----------------------------------------------------------------
 
-// Assumptions
-// ^^^^^^^^^^^
+// Ideal-world Model with G-Clock
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-module assumptions {
-    pure val NumberOfParties = 2
-
-    pure val Corrupted       = Set(1)
-
-    pure val MaxRound        = 5
-
-    pure val TapeSize        = 1
-
-    pure val LogsSize        = 10
-
-    pure val RoundDuration   = 1
-}
-
-// Utils
-// ^^^^^
-//
-module utils {
-    type Round_t = int
-
-    type Time_t = int
-
-    pure def FirstRound : int = 0
-
-    pure def TimeInit   : int = 0
-
-    // ^^^^^
-
-    type P_Sid_t = int
-
-    pure def InvalidP_Sid : int = -1
-
-    // ^^^^^
-
-    type Flag_t = bool
-
-    pure def One : Flag_t = true
-
-    pure def Zero : Flag_t = false
-
-    // ^^^^^
-
-    type Option_t[a] = Some(a) | None
-
-    // ^^^^^
-
-    type Effects_t[a] = List[a]
-
-    // ^^^^^
-
-    pure def min(a: int, b: int): int =
-        if (a < b) a else b
-}
-
-// UC Framework
-// ^^^^^^^^^^^^
-
-module uc {
-    import utils.*
-    import assumptions.*
-
-    type ITM[sid, in, out, in_msg] = {
-        sid                : sid,
-        input              : List[in],
-        output             : List[out],
-        incoming_messages  : List[in_msg],
-    }
-
-    type ItmEffect[in, out, in_msg] = ItmEffectUpdateInput(in)
-                                    | ItmEffectUpdateOutput(out)
-                                    | ItmEffectUpdateIncoming(in_msg)
-                                    | ItmEffectPopInput
-                                    | ItmEffectPopOutput
-                                    | ItmEffectPopIncoming
-
-    pure def ItmInit(sid: sid) : ITM[sid, in, out, incoming] = {
-        sid               : sid,
-        input             : [],
-        output            : [],
-        incoming_messages : [],
-    }
-
-    pure def PopTape(tape : List[a]) : List[a] = {
-        if (length(tape) == 0) tape else tape.tail()
-    }
-
-    pure def ItmApplyEffect(itm : ITM[sid, in, out, incoming], effect : ItmEffect[in, out, incoming]) : ITM[sid, in, out, incoming] = {
-        match (effect) {
-            | ItmEffectUpdateInput(msg)    => itm.with("input", itm.input.append(msg))
-            | ItmEffectUpdateOutput(msg)   => itm.with("output", itm.output.append(msg))
-            | ItmEffectUpdateIncoming(msg) => itm.with("incoming_messages", itm.incoming_messages.append(msg))
-            | ItmEffectPopInput            => itm.with("input", PopTape(itm.input))
-            | ItmEffectPopOutput           => itm.with("output", PopTape(itm.output))
-            | ItmEffectPopIncoming         => itm.with("incoming_messages", PopTape(itm.incoming_messages))
-        }
-    }
-
-    pure def ReadNew(tape : List[a]) : Option_t[a] = {
-        if (length(tape) == 0) None
-        else Some(tape.head())
-    }
-
-    pure def ReadNewInput(itm) = {
-        ReadNew(itm.input)
-    }
-
-    pure def ReadNewOutput(itm) = {
-        ReadNew(itm.output)
-    }
-
-    pure def ReadNewIncoming(itm) = {
-        ReadNew(itm.incoming_messages)
-    }
-
-    pure def ItmIsEmpty(itm : ITM[sid, in, out, incoming]) : bool = {
-        and {
-            length(itm.input) == 0,
-            length(itm.output) == 0,
-            length(itm.incoming_messages) == 0,
-        }
-    }
-
-    pure def ItmFits(itm : ITM[sid, in, out, incoming]) : bool = {
-        and {
-            length(itm.input) <= TapeSize,
-            length(itm.output) <= TapeSize,
-            length(itm.incoming_messages) <= TapeSize,
-        }
-    }
-}
-
-// -----------------------------------------------------------------
-
-// Ideal-world Model
-// ^^^^^^^^^^^^^^^^
-
-module iw {
-    import uc.*
-    import utils.*
-    import assumptions.*
+module iw_gclock {
+    import uc.* from "./uc"
+    import utils.* from "./utils"
+    import assumptions.* from "./assumptions"
+    import logs.* from "./logs"
+    import time.* from "./time"
 
     // -----------------------------------------------------------------
 
@@ -167,13 +30,6 @@ module iw {
 
     // Log
     // ^^^
-
-    type IwLog = IwLogRegOk(P_Sid_t)
-               | IwLogReg(P_Sid_t)
-               | IwLogRoundOk(P_Sid_t)
-               | IwLogFailed(P_Sid_t)
-               | IwLogPRound({ p_sid : P_Sid_t, round: Round_t })
-               | IwLogSRound(Round_t)
 
     // -----------------------------------------------------------------
 
@@ -254,7 +110,7 @@ module iw {
         }
     }
 
-    pure def IwClockCreateEnvSimLog(state : IwClockState, log : IwLog) : IwEffect =
+    pure def IwClockCreateEnvSimLog(state : IwClockState, log : Log_t) : IwEffect =
         EnvSimIwEffect(IwEnvSimEffectLog({
             log   : log,
             reg   : state.registered_parties,
@@ -292,7 +148,7 @@ module iw {
     }
 
     pure def IwClockSimulatorRound(clock : IwClockState) : Effects_t[IwEffect] = {
-        [IwClockCreateEnvSimLog(clock, IwLogSRound(clock.current_round))]
+        [IwClockCreateEnvSimLog(clock, LogSRound(clock.current_round))]
     }
 
     pure def IwClockOk(clock : IwClockState, p_sid : P_Sid_t) : Effects_t[IwEffect] = {
@@ -307,7 +163,7 @@ module iw {
                        .append(PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid
                                                                         , effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })))
             else [ GClockIwEffect(IwClockEffectUpdateDone({ p_sid : p_sid, flag : One }))
-                 , IwClockCreateEnvSimLog(clock, IwLogRoundOk(p_sid))
+                 , IwClockCreateEnvSimLog(clock, LogRoundOk(p_sid))
                  , PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid : p_sid, effect : ItmEffectUpdateOutput(IwPartiesOutputRoundOk) })) ]
         }
     }
@@ -349,40 +205,19 @@ module iw {
     // Environment and Simulator
     // ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    type IwEnvSimLog = {
-        index : int,
-        log   : IwLog,
-        reg   : Set[P_Sid_t],
-        c     : Set[P_Sid_t],
-        ok    : Set[P_Sid_t],
-        round : Round_t
-    }
-
     type IwEnvSimState = {
-        logs : Set[IwEnvSimLog]
+        logs : Set[EnvSimLog_t]
     }
 
-    type IwEnvSimEffect = IwEnvSimEffectLog({ log : IwLog, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t })
+    type IwEnvSimEffect = IwEnvSimEffectLog({ log : Log_t, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t })
 
     type IwEnvSimAction = IwEnvSimActionSetOk(P_Sid_t)
                         | IwEnvSimActionGetRound(P_Sid_t)
                         | IwEnvSimActionRegister(P_Sid_t)
 
-    pure def IwEnvSimNewLog(log : IwLog, index : int, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t) : IwEnvSimLog =
-        { index : index, log : log, reg : reg, c : c, ok : ok, round : round }
-
-    pure def IwEnvSimLogPush(logs: Set[IwEnvSimLog], l: IwLog, reg : Set[P_Sid_t], c : Set[P_Sid_t], ok : Set[P_Sid_t], round : Round_t) : Set[IwEnvSimLog] =
-        if (size(logs) >= LogsSize) {
-            val kept = logs.filter(x => x.index > 0)
-                           .map(x => { index: x.index - 1, log : x.log, reg : x.reg, c : x.c, ok : x.ok, round : x.round })
-            kept.union(Set(IwEnvSimNewLog(l, size(kept), reg, c, ok, round)))
-        } else {
-            logs.union(Set(IwEnvSimNewLog(l, size(logs), reg, c, ok, round)))
-        }
-
     pure def IwEnvSimApplyEffect(state : IwEnvSimState, effect : IwEnvSimEffect) : IwEnvSimState = {
         match effect {
-            | IwEnvSimEffectLog(r) => state.with("logs", IwEnvSimLogPush(state.logs, r.log, r.reg, r.c, r.ok, r.round))
+            | IwEnvSimEffectLog(r) => state.with("logs", EnvSimLogPush(state.logs, r.log, r.reg, r.c, r.ok, r.round))
         }
     }
 
@@ -398,19 +233,19 @@ module iw {
 
     pure def IwEnvSimReg(p_sid : P_Sid_t, clock : IwClockState) : Effects_t[IwEffect] = {
          [ PartiesIwEffect(IwPartiesEffectUpdateItm({ p_sid: p_sid, effect : ItmEffectUpdateInput(IwPartiesInputReg) }))
-         , IwClockCreateEnvSimLog(clock, IwLogReg(p_sid))]
+         , IwClockCreateEnvSimLog(clock, LogReg(p_sid))]
     }
 
     pure def IwEnvSimAllRegistered(zs : IwEnvSimState) : bool = {
         size((zs.logs.fold(Set(), (acc, l) => match l.log {
-            | IwLogRegOk(p_sid) => acc.union(Set(p_sid))
+            | LogRegOk(p_sid) => acc.union(Set(p_sid))
             | _                 => acc
         }))) >= NumberOfParties
     }
 
     pure def IwEnvSimRegistered(zs : IwEnvSimState, p_sid : P_Sid_t) : bool = {
         zs.logs.fold(false, (acc, l) => match l.log {
-            | IwLogRegOk(p) => acc or (p == p_sid)
+            | LogRegOk(p) => acc or (p == p_sid)
             | _ => acc
         })
     }
@@ -481,7 +316,7 @@ module iw {
     }
 
     pure def IwPartiesRoundToZ(p_sid : P_Sid_t, round : Round_t, clock : IwClockState) : Effects_t[IwEffect] = {
-        [IwClockCreateEnvSimLog(clock, IwLogPRound({ p_sid : p_sid, round : round }))]
+        [IwClockCreateEnvSimLog(clock, LogPRound({ p_sid : p_sid, round : round }))]
     }
 
     pure def IwPartiesOk(p_sid : P_Sid_t) : Effects_t[IwEffect] = {
@@ -490,10 +325,10 @@ module iw {
 
     pure def IwPartiesMaybeOkToZ(p_sid : P_Sid_t, response : IwPartiesOutput, clock : IwClockState) : Effects_t[IwEffect] = {
         [IwClockCreateEnvSimLog(clock, match response {
-                                                        | IwPartiesOutputRoundOk    => IwLogRoundOk(p_sid)
-                                                        | IwPartiesOutputRegisterOk => IwLogRegOk(p_sid)
-                                                        | IwPartiesOutputFailed     => IwLogFailed(p_sid)
-                                                        | _                         => IwLogFailed(p_sid)})]
+                                                        | IwPartiesOutputRoundOk    => LogRoundOk(p_sid)
+                                                        | IwPartiesOutputRegisterOk => LogRegOk(p_sid)
+                                                        | IwPartiesOutputFailed     => LogFailed(p_sid)
+                                                        | _                         => LogFailed(p_sid)})]
     }
 
     pure def IwPartiesTransition(which : IwPartiesAction, p_sid : P_Sid_t, parties : IwPartiesState, clock : IwClockState) : Effects_t[IwEffect] = {
@@ -589,6 +424,7 @@ module iw {
         }
     }
 
+
     // -----------------------------------------------------------------
 
     // Properties
@@ -610,250 +446,10 @@ module iw {
     val RoundBounded =
         Iw_GClock.current_round <= MaxRound
 
-    // Property 1 (Time Agreement): If two parties query the time and no OK requests have been sent
-    // in the middle then G-clock responds with the same time.
-    val TimeAgreement =
-       Iw_ZS.logs.forall(l1 =>
-            match l1.log {
-                | IwLogPRound(r1) => {
-                    Iw_ZS.logs.forall(l2 =>
-                        match l2.log {
-                            | IwLogPRound(r2) =>
-                                (l2.index > l1.index) implies {
-                                    val no_ok_between = Iw_ZS.logs.forall(lm =>
-                                        and { lm.index > l1.index, lm.index < l2.index } implies {
-                                            match lm.log {
-                                                | IwLogRoundOk(_) => false
-                                                | _               => true
-                                            }
-                                        }
-                                    )
+    // G-Clock time properties (generic, see time_props)
+    val TimeAgreement = TimeAgreementOn(Iw_ZS.logs)
 
-                                    no_ok_between implies {
-                                        r1.round == r2.round
-                                    }
-                                }
-                            | _ => true
-                        }
-                    )
-                }
-                | _ => true
-            }
-       )
+    val TimeLiveness  = TimeLivenessOn(Iw_ZS.logs)
 
-    // Property 2 (Time Liveness):  If all registered honest parties are ready, then time advances.
-    // this is non-trivial since we have to track who was registered and corrupted at all times
-    val TimeLiveness =
-        Iw_ZS.logs.forall(l2 =>
-            Iw_ZS.logs.forall(l1 =>
-                (l1.index + 1 == l2.index) implies
-                match l2.log {
-                    | IwLogRoundOk(p) => {
-                        val honest = l2.reg.exclude(l2.c)
-                        val all_ready = and {
-                            honest.size() > 0,
-                            honest.forall(q => l2.ok.contains(q) or q == p),
-                        }
-                        all_ready implies (l2.round == min(l1.round + 1, MaxRound))
-                    }
-                    | _ => true
-                }
-            )
-        )
-
-    // Property 3 (Time Soundness): If time advanced then all currently registered honest parties were ready.
-    val TimeSoundness =
-        Iw_ZS.logs.forall(l2 =>
-            Iw_ZS.logs.forall(l1 =>
-                and { l1.index + 1 == l2.index, l2.round > l1.round } implies
-                match l2.log {
-                    | IwLogRoundOk(p) => {
-                        val honest = l2.reg.exclude(l2.c)
-                        val all_ready = and {
-                            honest.size() > 0,
-                            honest.forall(q => l2.ok.contains(q) or q == p),
-                        }
-                        and {
-                            all_ready,
-                            l2.round == l1.round + 1,
-                            l2.ok.exclude(l2.c) == Set(),
-                        }
-                    }
-                    | _ => false
-                }
-            )
-        )
-}
-
-// -----------------------------------------------------------------
-
-// Real-world Model
-// ^^^^^^^^^^^^^^^^
-
-module rw {
-    import uc.*
-    import utils.*
-    import assumptions.*
-
-    type Rw_Sid_t = Rw_ZS_Sid
-                  | Rw_P_Sid(P_Sid_t)
-                  | Rw_FLocal_Sid(P_Sid_t)
-                  | Rw_FDDiffuse_Sid(P_Sid_t)
-                  | Rw_GrefRate_Sid
-
-    type RwItm[in, out, incoming] = ITM[Rw_Sid_t, in, out, incoming]
-
-    // -----------------------------------------------------------------
-
-    // Hybrid Functionalities
-    // ^^^^^^^^^^^^^^^^^^^^^^
-
-    type RwBlock = ()
-
-    // -----------------------------------------------------------------
-
-    // F_Local
-    // ^^^^^^^
-
-    type RwFLocalInput = RwFLocalInputZIncrease // increases local_clock_z
-                       | RwFLocalInputGetClock
-
-    type RwFLocalOutput = RwFLocalOutputRegistered
-                        | RwFLocalInputContinue // increases local_clock
-
-    type RwFLocalIncoming = ()
-
-    type RwFLocalState = {
-        local_counter   : Time_t,
-        local_counter_z : Time_t,
-        clock_drift     : Time_t,
-        itm             : RwItm[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming],
-        is_registered   : bool
-    }
-
-    type RwFLocalsState = P_Sid_t -> RwFLocalState
-
-    type RwFLocalsEffect = RwFLocalsEffectZIncrease(P_Sid_t)
-                         | RwFLocalsEffectIncrease(P_Sid_t)
-                         | RwFLocalsEffectUpdateClockDrift(P_Sid_t)
-                         | RwFLocalsEffectUpdateItm({ p_sid: P_Sid_t, effect : ItmEffect })
-                         | RwFLocalsEffectSetRegistered
-
-    pure def RwFLocalsInit() : RwFLocalsState =
-        1.to(NumberOfParties).mapBy(i => ({ local_counter : TimeInit
-                                          , local_counter_z : TimeInit
-                                          , clock_drift : 0
-                                          , itm : ItmInit(Rw_FLocal_Sid(i))
-                                          , is_registered : false }))
-
-    // -----------------------------------------------------------------
-
-    // F_DDiffuse
-    // ^^^^^^^^^^
-
-    type RwFDDiffuseMessage = {
-        sender        : P_Sid_t,
-        message       : RwBlock,
-        timestamp     : Time_t,
-        is_registered : bool
-    }
-
-    type RwFDDiffuseInput = RwFDDiffuseInputFetch
-                          | RwFDDiffuseInputDiffuse(RwFDDiffuseMessage)
-
-    type RwFDDiffuseOutput = | RwFDDiffuseOutputRegistered
-
-    type RwFDDiffuseIncoming = ()
-
-    type RwFDDiffuseState = {
-        clock : Time_t,
-        inbox : List[RwFDDiffuseMessage],
-        itm   : RwItm[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming],
-        is_registered : bool
-    }
-
-    type RwFDDiffusesState = P_Sid_t -> RwFDDiffuseState
-
-    type RwFDDiffusesEffect = RwFDDiffusesEffectIncrement(P_Sid_t)
-                            | RwFDDiffusesEffectAddInbox({ p_sid : P_Sid_t, message : RwFDDiffuseMessage })
-                            | RwFDDiffusesEffectRemainingInbox({ p_sid : P_Sid_t })
-                            | RwFDDiffusesEffectSetRegistered
-                            | RwFDDiffuseEffectUpdateItm(ItmEffect)
-
-    pure def RwFDDiffusesInit() : RwFDDiffusesState =
-        1.to(NumberOfParties).mapBy(i => ({ clock         : TimeInit
-                                          , inbox         : []
-                                          , itm           : ItmInit(Rw_FDDiffuse_Sid(i))
-                                          , is_registered : false }))
-
-    // -----------------------------------------------------------------
-
-    // G_refRate
-    // ^^^^^^^^^
-
-    type RwGrefRateInput = RwGrefRateInputRegister(Rw_Sid_t)
-                         | RwGrefRateInputContinue
-
-    type RwGrefRateOutput = ()
-
-    type RwGrefRateIncoming = ()
-
-    type RwGrefRateState = {
-        registered : Set[Rw_Sid_t],
-        itm        : RwItm[RwGrefRateInput, RwGrefRateOutput, RwGrefRateIncoming]
-    }
-
-    type RwGrefRateEffect = RwGrefRateEffectRegister(Rw_Sid_t)
-                          | RwGrefRateEffectIncrement
-                          | RwGrefRateEffectUpdateItm(ItmEffect)
-
-    pure def RwGrefRateInit() : RwGrefRateState = {
-        registered : Set(),
-        itm : ItmInit(Rw_GrefRate_Sid)
-    }
-
-    // -----------------------------------------------------------------
-
-    // Relative Time Protocol
-    // ^^^^^^^^^^^^^^^^^^^^^^
-
-    type RwPartyInput = ()
-
-    type RwPartyOutput = | RwPartyInputCurrentTime(Time_t)
-
-    type RwPartyIncoming = ()
-
-    type RwReferencePoint = {
-        round : Round_t,
-        time : Time_t
-    }
-
-    type RwPartyState = {
-        reference_point : RwReferencePoint,
-        itm  : RwItm[RwPartyInput, RwPartyOutput, RwPartyIncoming]
-    }
-
-    type RwPartiesState = P_Sid_t -> RwPartyState
-
-    type RwPartiesEffect = RwPartiesEffectUpdateReference(RwReferencePoint)
-                         | RwPartiesEffectsUpdateItm(ItmEffect)
-
-    pure def RwPartiesInit() : RwPartiesState =
-        1.to(NumberOfParties).mapBy(i => ({ reference_point : { round : FirstRound, time : TimeInit }
-                                          , itm             : ItmInit(Rw_P_Sid(i))}))
-}
-
-// Main
-// ^^^^
-
-module uc_gclock {
-    import iw.*
-
-    action init = all {
-        IwInit
-    }
-
-    action step = all {
-        IwStep
-    }
+    val TimeSoundness = TimeSoundnessOn(Iw_ZS.logs)
 }
