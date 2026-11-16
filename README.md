@@ -31,10 +31,7 @@ type ITM[in, out, in_msg] = {
 }
 ```
 
-Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it:
-- All communication received from the protocol participants are forwarded directly to the environment Z. That is, when A receives incoming m from party P, it simply writes "received m from P" on the subroutine tape of Z.
-- It sends messages from the adversary to the parties, as directed. That is, when A receives "send m to P" from Z, it writes m on the incoming message tape of party P.
-- Parties can write directly to the global functionality's input tape, and the functionality can write to the parties’ output tapes.
+Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it (rules can be found [here](https://swayam-padhy.gitbook.io/)).
 
 ## Ideal World
 
