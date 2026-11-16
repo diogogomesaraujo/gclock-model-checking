@@ -4,7 +4,6 @@
 // ^^^^^^^^^^^
 
 module assumptions {
-    // Common
     pure val NumberOfParties = 2
 
     pure val Corrupted       = Set()
@@ -15,17 +14,15 @@ module assumptions {
 
     pure val LogsSize        = 5
 
-    pure val RoundDuration   = 2   // T
+    pure val RoundDuration   = 2
 
-    // Real world (Relative Time protocol) and G-Slot
-    pure val Delta           = 1   // network delay ∆ (in slots) of F_DDiffuse
+    pure val Delta           = 1
 
-    pure val MaxDrift        = 1   // bound on Σ ∈ ℕ; Theorem 7 needs Σ < RoundDuration (use RoundDuration = 2)
+    pure val MaxDrift        = 1
 
-    pure val SampleSize      = 1   // n: blocks collected before running the median algorithm
+    pure val SampleSize      = 1
 
-    pure val InboxSize       = 1   // bound on pending messages per F_DDiffuse instance
+    pure val InboxSize       = 1
 
-    // Theorem 7: the relative time protocol realizes G_Slot with Θ = ∆ + 1.
     pure val Theta           = Delta + 1
 }

@@ -446,7 +446,6 @@ module iw_gclock {
     val RoundBounded =
         Iw_GClock.current_round <= MaxRound
 
-    // G-Clock time properties (generic, see time_props)
     val TimeAgreement = TimeAgreementOn(Iw_ZS.logs)
 
     val TimeLiveness  = TimeLivenessOn(Iw_ZS.logs)

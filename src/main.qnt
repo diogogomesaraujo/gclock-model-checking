@@ -35,14 +35,8 @@ module rw {
     // Set when a step needed more than TapeSize / InboxSize slots.
     var Rw_overflow   : bool
 
-    // Bounds that keep the state space finite.
-    pure val RwMaxTime  = MaxRound * RoundDuration  // G_refRate ticks
-    pure val RwMaxClock = RwMaxTime + MaxDrift      // local clocks
-
-    // -----------------------------------------------------------------
-
-    // Log (what Z sees; same shape as the ideal world)
-    // ^^^
+    pure val RwMaxTime  = MaxRound * RoundDuration
+    pure val RwMaxClock = RwMaxTime + MaxDrift
 
     // -----------------------------------------------------------------
 
@@ -79,7 +73,7 @@ module rw {
             w.l.keys().forall(k => ItmFits(w.l.get(k).itm)),
             w.d.keys().forall(k => and {
                 ItmFits(w.d.get(k).itm),
-                length(w.d.get(k).inbox) + length(w.d.get(k).ready) <= InboxSize,
+                length(w.d.get(k).inbox) <= InboxSize,
             }),
             w.p.keys().forall(k => ItmFits(w.p.get(k).itm)),
         }
@@ -131,8 +125,8 @@ module rw {
     type RwGrefRateState = {
         registered : Set[Rw_Sid_t],
         itm        : RwItm[RwGrefRateInput, RwGrefRateOutput, RwGrefRateIncoming],
-        counter    : Time_t,  // number of Continue seen: real slot = counter / T
-        ok         : Set[P_Sid_t] // ghost: parties that did Ok in the current real slot (G-Clock's Done)
+        counter    : Time_t,
+        ok         : Set[P_Sid_t]
     }
 
     type RwGrefRateAction = | RwGrefRateActionRdInput
@@ -163,7 +157,6 @@ module rw {
 
     pure def RwCurrentSlot(g : RwGrefRateState) : Round_t = g.counter / RoundDuration
 
-    // (Registration) add to ListRate and answer Registered.
     pure def RwGrefRateRegister(sid : Rw_Sid_t) : Effects_t[RwEffect] = {
         [GrefRateRwEffect(RwGrefRateEffectRegister(sid))].concat(
             match sid {
@@ -173,7 +166,6 @@ module rw {
             })
     }
 
-    // (Progress in Time) send Increase to every registered party.
     pure def RwGrefRateContinue(g : RwGrefRateState) : Effects_t[RwEffect] = {
         g.registered.fold([], (acc, sid) =>
             match sid {
@@ -216,7 +208,6 @@ module rw {
     type RwFLocalState = {
         local_counter   : Time_t,
         local_counter_z : Time_t,
-        clock_drift     : Time_t,
         itm             : RwItm[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming],
         is_registered   : bool
     }
@@ -227,7 +218,6 @@ module rw {
 
     type RwFLocalsEffect = RwFLocalsEffectZIncrease(P_Sid_t)
                          | RwFLocalsEffectIncrease(P_Sid_t)
-                         | RwFLocalsEffectUpdateClockDrift(P_Sid_t)
                          | RwFLocalsEffectUpdateItm({ p_sid: P_Sid_t, effect : ItmEffect[RwFLocalInput, RwFLocalOutput, RwFLocalIncoming] })
                          | RwFLocalsEffectSetRegistered(P_Sid_t)
 
@@ -235,7 +225,6 @@ module rw {
         match (effect) {
             | RwFLocalsEffectZIncrease(p_sid)        => state.put(p_sid, state.get(p_sid).with("local_counter_z", min(state.get(p_sid).local_counter_z + 1, RwMaxClock)))
             | RwFLocalsEffectIncrease(p_sid)         => state.put(p_sid, state.get(p_sid).with("local_counter", min(state.get(p_sid).local_counter + 1, RwMaxClock)))
-            | RwFLocalsEffectUpdateClockDrift(p_sid) => state.put(p_sid, state.get(p_sid).with("clock_drift", state.get(p_sid).local_counter - state.get(p_sid).local_counter_z))
             | RwFLocalsEffectUpdateItm(r)            => state.put(r.p_sid, state.get(r.p_sid).with("itm", ItmApplyEffect(state.get(r.p_sid).itm, r.effect)))
             | RwFLocalsEffectSetRegistered(p_sid)    => state.put(p_sid, state.get(p_sid).with("is_registered", true))
         }
@@ -244,29 +233,22 @@ module rw {
     pure def RwFLocalsInit() : RwFLocalsState =
         1.to(NumberOfParties).mapBy(i => ({ local_counter : TimeInit
                                           , local_counter_z : TimeInit
-                                          , clock_drift : 0
                                           , itm : ItmInit(Rw_FLocal_Sid(i))
                                           , is_registered : false }))
 
-    // (Registration) once registered at G_refRate, F_DDiffuse is registered too.
     pure def RwFLocalRegister(p_sid : P_Sid_t) : Effects_t[RwEffect] = {
         [ FLocalsRwEffect(RwFLocalsEffectSetRegistered(p_sid))
         , RwToGrefRate(ItmEffectUpdateInput(RwGrefRateInputRegister(Rw_FLocal_Sid(p_sid)))) ]
     }
 
-    // (Increasing localclockZ) Σ = localclock - localclockZ
     pure def RwFLocalZIncrease(p_sid : P_Sid_t) : Effects_t[RwEffect] = {
-        [ FLocalsRwEffect(RwFLocalsEffectZIncrease(p_sid))
-        , FLocalsRwEffect(RwFLocalsEffectUpdateClockDrift(p_sid)) ]
+        [FLocalsRwEffect(RwFLocalsEffectZIncrease(p_sid))]
     }
 
-    // (Increasing localclock) Σ = localclock - localclockZ
     pure def RwFLocalIncrease(p_sid : P_Sid_t) : Effects_t[RwEffect] = {
-        [ FLocalsRwEffect(RwFLocalsEffectIncrease(p_sid))
-        , FLocalsRwEffect(RwFLocalsEffectUpdateClockDrift(p_sid)) ]
+        [FLocalsRwEffect(RwFLocalsEffectIncrease(p_sid))]
     }
 
-    // (get clock) answer localclockZ to the party. localclock is never shared.
     pure def RwFLocalGetClock(p_sid : P_Sid_t, local : RwFLocalState) : Effects_t[RwEffect] = {
         [RwToParty(p_sid, ItmEffectUpdateIncoming(RwPartyIncomingClock(local.local_counter_z)))]
     }
@@ -303,23 +285,16 @@ module rw {
 
     // F_DDiffuse
     // ^^^^^^^^^^
-    //
-    // One instance per party; instance q holds the messages addressed to q.
-    //   inbox : delayed messages (timestamp = local time ℓ_q when received)
-    //   ready : messages that A released or that expired, not fetched yet
 
     type RwFDDiffuseMessage = {
         sender        : P_Sid_t,
         message       : RwBlock,
-        timestamp     : Time_t,
-        is_registered : bool
+        timestamp     : Time_t
     }
 
-    type RwFDDiffuseInput = RwFDDiffuseInputFetch
-                          | RwFDDiffuseInputDiffuse(RwFDDiffuseMessage)
+    type RwFDDiffuseInput = RwFDDiffuseInputDiffuse(RwFDDiffuseMessage)
                           | RwFDDiffuseInputRegister
                           | RwFDDiffuseInputRelease(int)
-                          | RwFDDiffuseInputInject(RwFDDiffuseMessage)
 
     type RwFDDiffuseOutput = | RwFDDiffuseOutputRegistered
                              | RwFDDiffuseOutputContinue
@@ -329,7 +304,6 @@ module rw {
     type RwFDDiffuseState = {
         clock : Time_t,
         inbox : List[RwFDDiffuseMessage],
-        ready : List[RwFDDiffuseMessage],
         itm   : RwItm[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming],
         is_registered : bool
     }
@@ -341,8 +315,6 @@ module rw {
     type RwFDDiffusesEffect = RwFDDiffusesEffectIncrement(P_Sid_t)
                             | RwFDDiffusesEffectAddInbox({ p_sid : P_Sid_t, message : RwFDDiffuseMessage })
                             | RwFDDiffusesEffectRemainingInbox({ p_sid : P_Sid_t, remaining : List[RwFDDiffuseMessage] })
-                            | RwFDDiffusesEffectAddReady({ p_sid : P_Sid_t, message : RwFDDiffuseMessage })
-                            | RwFDDiffusesEffectClearReady(P_Sid_t)
                             | RwFDDiffusesEffectSetRegistered(P_Sid_t)
                             | RwFDDiffuseEffectUpdateItm({ p_sid : P_Sid_t, effect : ItmEffect[RwFDDiffuseInput, RwFDDiffuseOutput, RwFDDiffuseIncoming] })
 
@@ -351,8 +323,6 @@ module rw {
             | RwFDDiffusesEffectIncrement(p_sid)       => state.put(p_sid, state.get(p_sid).with("clock", min(state.get(p_sid).clock + 1, RwMaxClock)))
             | RwFDDiffusesEffectAddInbox(r)            => state.put(r.p_sid, state.get(r.p_sid).with("inbox", state.get(r.p_sid).inbox.append(r.message)))
             | RwFDDiffusesEffectRemainingInbox(r)      => state.put(r.p_sid, state.get(r.p_sid).with("inbox", r.remaining))
-            | RwFDDiffusesEffectAddReady(r)            => state.put(r.p_sid, state.get(r.p_sid).with("ready", state.get(r.p_sid).ready.append(r.message)))
-            | RwFDDiffusesEffectClearReady(p_sid)      => state.put(p_sid, state.get(p_sid).with("ready", []))
             | RwFDDiffusesEffectSetRegistered(p_sid)   => state.put(p_sid, state.get(p_sid).with("is_registered", true))
             | RwFDDiffuseEffectUpdateItm(r)            => state.put(r.p_sid, state.get(r.p_sid).with("itm", ItmApplyEffect(state.get(r.p_sid).itm, r.effect)))
         }
@@ -361,11 +331,9 @@ module rw {
     pure def RwFDDiffusesInit() : RwFDDiffusesState =
         1.to(NumberOfParties).mapBy(i => ({ clock         : TimeInit
                                           , inbox         : []
-                                          , ready         : []
                                           , itm           : ItmInit(Rw_FDDiffuse_Sid(i))
                                           , is_registered : false }))
 
-    // A delayed message must reach the party once ℓ >= ℓ_i + ∆T.
     pure def RwFDDiffuseExpired(d : RwFDDiffuseState, m : RwFDDiffuseMessage) : bool =
         d.clock >= m.timestamp + Delta * RoundDuration
 
@@ -374,8 +342,6 @@ module rw {
         , RwToGrefRate(ItmEffectUpdateInput(RwGrefRateInputRegister(Rw_FDDiffuse_Sid(p_sid)))) ]
     }
 
-    // (Diffuse) every other registered stakeholder receives the message,
-    // stamped with its own local time ℓ, as a delayed message.
     pure def RwFDDiffuseDiffuse(p_sid : P_Sid_t, m : RwFDDiffuseMessage, ds : RwFDDiffusesState) : Effects_t[RwEffect] = {
         ds.keys().exclude(Set(p_sid)).filter(q => ds.get(q).is_registered).fold([], (acc, q) =>
             acc.append(FDDiffusesRwEffect(RwFDDiffusesEffectAddInbox({
@@ -384,17 +350,6 @@ module rw {
             }))))
     }
 
-    // (Fetch) give the party everything released or expired.
-    pure def RwFDDiffuseFetch(p_sid : P_Sid_t, d : RwFDDiffuseState) : Effects_t[RwEffect] = {
-        val expired   = d.inbox.select(m => RwFDDiffuseExpired(d, m))
-        val remaining = d.inbox.select(m => not(RwFDDiffuseExpired(d, m)))
-        val delivered = d.ready.concat(expired).foldl(Set(), (acc, m) => acc.union(Set(m)))
-        [ FDDiffusesRwEffect(RwFDDiffusesEffectClearReady(p_sid))
-        , FDDiffusesRwEffect(RwFDDiffusesEffectRemainingInbox({ p_sid : p_sid, remaining : remaining }))
-        , RwToParty(p_sid, ItmEffectUpdateIncoming(RwPartyIncomingInbox(delivered))) ]
-    }
-
-    // (delayed_i / release) A lets F_DDiffuse move inbox[index] forward.
     pure def RwFDDiffuseRelease(p_sid : P_Sid_t, index : int, d : RwFDDiffuseState) : Effects_t[RwEffect] = {
         if (index >= 0 and index < length(d.inbox)) {
             [ RwToParty(p_sid, ItmEffectUpdateIncoming(RwPartyIncomingInbox(Set(d.inbox.nth(index)))))
@@ -403,8 +358,6 @@ module rw {
         } else []
     }
 
-    // (Continue) ℓ := ℓ + 1; messages with ℓ >= ℓ_i + ∆T are pushed to the party now,
-    // so the party reads its local clock at the real arrival moment.
     pure def RwFDDiffuseContinue(p_sid : P_Sid_t, d : RwFDDiffuseState) : Effects_t[RwEffect] = {
         val nd        = d.with("clock", d.clock + 1)
         val expired   = d.inbox.select(m => RwFDDiffuseExpired(nd, m))
@@ -422,10 +375,8 @@ module rw {
                     | Some(input_message) => {
                         (match input_message {
                             | RwFDDiffuseInputRegister      => RwFDDiffuseRegister(p_sid)
-                            | RwFDDiffuseInputFetch         => RwFDDiffuseFetch(p_sid, ds.get(p_sid))
                             | RwFDDiffuseInputDiffuse(m)    => RwFDDiffuseDiffuse(p_sid, m, ds)
                             | RwFDDiffuseInputRelease(i)    => RwFDDiffuseRelease(p_sid, i, ds.get(p_sid))
-                            | RwFDDiffuseInputInject(m)     => [FDDiffusesRwEffect(RwFDDiffusesEffectAddInbox({ p_sid : p_sid, message : m.with("timestamp", ds.get(p_sid).clock) }))]
                         }).append(RwToFDDiffuse(p_sid, ItmEffectPopInput))
                     }
                     | None => []
@@ -453,10 +404,8 @@ module rw {
     type RwPartyInput = RwPartyInputReg      // Z: join
                       | RwPartyInputRound    // Z: what slot is it?
                       | RwPartyInputOk       // Z: produce my block for this slot
-                      | RwPartyInputActivate // Z: activation, the party polls F_DDiffuse
 
     type RwPartyOutput = RwPartyOutputCurrentTime(Time_t)
-                       | RwPartyOutputInbox(Set[RwFDDiffuseMessage])
                        | RwPartyOutputRegisterOk
                        | RwPartyOutputRoundOk
                        | RwPartyOutputFailed
@@ -481,8 +430,8 @@ module rw {
         reference_point : RwReferencePoint,
         itm  : RwItm[RwPartyInput, RwPartyOutput, RwPartyIncoming],
         registered : bool,
-        synced     : bool,                 // knows a reference point
-        arrivals   : List[RwArrival],      // collected until SampleSize (= n)
+        synced     : bool,
+        arrivals   : List[RwArrival],
         pending    : RwPartyPending
     }
 
@@ -534,7 +483,6 @@ module rw {
                      .fold(0, (acc, v) => v)
     }
 
-    // Algorithm 3: sl = slmax, candidate start of sl from block i is t_i + (sl - sl_i) T.
     pure def RwMedianReference(arrivals : List[RwArrival]) : RwReferencePoint = {
         val sl  = arrivals.foldl(FirstRound, (acc, a) => if (a.slot > acc) a.slot else acc)
         val lst = arrivals.foldl([], (acc, a) => acc.append(a.time + (sl - a.slot) * RoundDuration))
@@ -544,32 +492,25 @@ module rw {
     pure def RwHasArrival(arrivals : List[RwArrival], m : RwFDDiffuseMessage) : bool =
         arrivals.select(a => and { a.sender == m.sender, a.slot == m.message.slot }).length() > 0
 
-    // keep at most n arrivals; equivocated (same sender and slot) blocks are ignored
     pure def RwAddArrivals(arrivals : List[RwArrival], blocks : Set[RwFDDiffuseMessage], t : Time_t) : List[RwArrival] =
         blocks.fold(arrivals, (acc, m) =>
             if (and { length(acc) < SampleSize, not(RwHasArrival(acc, m)) })
                 acc.append({ sender : m.sender, slot : m.message.slot, time : t })
             else acc)
 
-    // ^^^^^ Z-facing log
-
     pure def RwCreateEnvSimLog(g : RwGrefRateState, l : RwFLocalsState, log : Log_t) : RwEffect =
         EnvSimRwEffect(RwEnvSimEffectLog({
             log   : log,
             reg   : l.keys().filter(k => l.get(k).is_registered),
-            c     : Corrupted,
+            c     : Set(),
             ok    : g.ok,
             round : RwCurrentSlot(g)
         }))
 
-    // ^^^^^ Actions called on a party
-
-    // Input Reg from Z: register at F_Local (which registers F_DDiffuse next).
     pure def RwPartiesRegister(p_sid : P_Sid_t) : Effects_t[RwEffect] = {
         [RwToFLocal(p_sid, ItmEffectUpdateInput(RwFLocalInputRegister))]
     }
 
-    // Input Round / Ok from Z: ask F_Local for the local time first.
     pure def RwPartiesAskClock(p_sid : P_Sid_t, party : RwPartyState, pending : RwPartyPending) : Effects_t[RwEffect] = {
         if (and { party.registered, party.synced })
             [ PartiesRwEffect(RwPartiesEffectSetPending({ p_sid : p_sid, pending : pending }))
@@ -578,28 +519,18 @@ module rw {
             [RwToParty(p_sid, ItmEffectUpdateOutput(RwPartyOutputFailed))]
     }
 
-    // Input Activate from Z: poll F_DDiffuse.
-    pure def RwPartiesActivate(p_sid : P_Sid_t, party : RwPartyState) : Effects_t[RwEffect] = {
-        if (party.registered) [RwToFDDiffuse(p_sid, ItmEffectUpdateInput(RwFDDiffuseInputFetch))] else []
-    }
-
-    // Registered received from F_DDiffuse. A party joining before time started
-    // gets the genesis reference point (FirstRound, TimeInit); later it must
-    // run the median algorithm.
     pure def RwPartiesRegistered(p_sid : P_Sid_t, g : RwGrefRateState) : Effects_t[RwEffect] = {
         [ PartiesRwEffect(RwPartiesEffectSetRegistered({ p_sid : p_sid, synced : g.counter == TimeInit }))
         , RwToParty(p_sid, ItmEffectUpdateOutput(RwPartyOutputRegisterOk)) ]
     }
 
-    // Blocks arrived: keep the valid, non-equivocated ones and ask the clock.
     pure def RwPartiesInbox(p_sid : P_Sid_t, party : RwPartyState, blocks : Set[RwFDDiffuseMessage]) : Effects_t[RwEffect] = {
-        val valid = blocks.filter(m => and { m.is_registered, not(RwHasArrival(party.arrivals, m)) })
+        val valid = blocks.filter(m => not(RwHasArrival(party.arrivals, m)))
         if (or { party.synced, valid.size() == 0 }) []
         else [ PartiesRwEffect(RwPartiesEffectSetPending({ p_sid : p_sid, pending : RwPendingBlocks(valid) }))
              , RwToFLocal(p_sid, ItmEffectUpdateInput(RwFLocalInputGetClock)) ]
     }
 
-    // Clock t received from F_Local.
     pure def RwPartiesClock(p_sid : P_Sid_t, party : RwPartyState, t : Time_t) : Effects_t[RwEffect] = {
         val done = PartiesRwEffect(RwPartiesEffectSetPending({ p_sid : p_sid, pending : RwPendingNone }))
         match party.pending {
@@ -609,8 +540,7 @@ module rw {
                 , done ]
             }
             | RwPendingOk => {
-                // produce the block of the current slot, diffuse it
-                val block = { sender : p_sid, message : { slot : RwSMap(party.reference_point, t) }, timestamp : TimeInit, is_registered : true }
+                val block = { sender : p_sid, message : { slot : RwSMap(party.reference_point, t) }, timestamp : TimeInit }
                 [ RwToParty(p_sid, ItmEffectUpdateOutput(RwPartyOutputRoundOk))
                 , GrefRateRwEffect(RwGrefRateEffectAddOk(p_sid))
                 , RwToFDDiffuse(p_sid, ItmEffectUpdateInput(RwFDDiffuseInputDiffuse(block)))
@@ -630,14 +560,12 @@ module rw {
         }
     }
 
-    // Output to Z.
     pure def RwPartiesToZ(p_sid : P_Sid_t, response : RwPartyOutput, g : RwGrefRateState, l : RwFLocalsState) : Effects_t[RwEffect] = {
         match response {
             | RwPartyOutputCurrentTime(r) => [RwCreateEnvSimLog(g, l, LogPRound({ p_sid : p_sid, round : r }))]
             | RwPartyOutputRegisterOk     => [RwCreateEnvSimLog(g, l, LogRegOk(p_sid))]
             | RwPartyOutputRoundOk        => [RwCreateEnvSimLog(g, l, LogRoundOk(p_sid))]
             | RwPartyOutputFailed         => [RwCreateEnvSimLog(g, l, LogFailed(p_sid))]
-            | RwPartyOutputInbox(_)       => []
         }
     }
 
@@ -651,7 +579,6 @@ module rw {
                             | RwPartyInputReg      => RwPartiesRegister(p_sid)
                             | RwPartyInputRound    => RwPartiesAskClock(p_sid, party, RwPendingRound)
                             | RwPartyInputOk       => RwPartiesAskClock(p_sid, party, RwPendingOk)
-                            | RwPartyInputActivate => RwPartiesActivate(p_sid, party)
                         }).append(RwToParty(p_sid, ItmEffectPopInput))
                     }
                     | None => []
@@ -683,8 +610,8 @@ module rw {
 
     // -----------------------------------------------------------------
 
-    // Environment and (dummy) Adversary
-    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    // Environment and Adversary
+    // ^^^^^^^^^^^^^^^^^^^^^^^^^
 
     type RwEnvSimState = {
         logs : Set[EnvSimLog_t]
@@ -695,12 +622,9 @@ module rw {
     type RwEnvSimAction = RwEnvSimActionSetOk(P_Sid_t)
                         | RwEnvSimActionGetRound(P_Sid_t)
                         | RwEnvSimActionRegister(P_Sid_t)
-                        | RwEnvSimActionActivate(P_Sid_t)
-                        | RwEnvSimActionContinue                                      // Z -> G_refRate
-                        | RwEnvSimActionLocalIncrease(P_Sid_t)                        // Z -> F_Local (Increase)
-                        | RwEnvSimActionRelease({ p_sid : P_Sid_t, index : int })     // A moves a delayed message
-                        | RwEnvSimActionAdvDiffuse({ p_sid : P_Sid_t, slot : Round_t }) // corrupted party diffuses
-                        | RwEnvSimActionAdvInject({ p_sid : P_Sid_t, sender : P_Sid_t, slot : Round_t }) // corrupted sender -> one recipient
+                        | RwEnvSimActionContinue
+                        | RwEnvSimActionLocalIncrease(P_Sid_t)
+                        | RwEnvSimActionRelease({ p_sid : P_Sid_t, index : int })
 
     pure def RwEnvSimApplyEffect(state : RwEnvSimState, effect : RwEnvSimEffect) : RwEnvSimState = {
         match effect {
@@ -716,11 +640,9 @@ module rw {
     pure def RwEnvSimRegistered(w : RwWorld, p_sid : P_Sid_t) : bool =
         w.p.get(p_sid).registered
 
-    // Z only sends when every honest inbox can take the new message.
     pure def RwInboxesHaveRoom(d : RwFDDiffusesState, sender : P_Sid_t) : bool =
-        d.keys().exclude(Set(sender)).forall(q => length(d.get(q).inbox) + length(d.get(q).ready) < InboxSize)
+        d.keys().exclude(Set(sender)).forall(q => length(d.get(q).inbox) < InboxSize)
 
-    // Σ must stay within MaxDrift (Theorem 7 needs |Σ| < T).
     pure def RwDriftAllowsContinue(l : RwFLocalsState) : bool =
         l.keys().forall(k => or { not(l.get(k).is_registered)
                                 , and { l.get(k).local_counter + 1 <= RwMaxClock
@@ -742,9 +664,6 @@ module rw {
     pure def RwEnvSimRound(p_sid : P_Sid_t) : Effects_t[RwEffect] =
         [RwToParty(p_sid, ItmEffectUpdateInput(RwPartyInputRound))]
 
-    pure def RwEnvSimActivate(p_sid : P_Sid_t) : Effects_t[RwEffect] =
-        [RwToParty(p_sid, ItmEffectUpdateInput(RwPartyInputActivate))]
-
     pure def RwEnvSimContinue : Effects_t[RwEffect] =
         [RwToGrefRate(ItmEffectUpdateInput(RwGrefRateInputContinue))]
 
@@ -754,31 +673,15 @@ module rw {
     pure def RwEnvSimRelease(p_sid : P_Sid_t, index : int) : Effects_t[RwEffect] =
         [RwToFDDiffuse(p_sid, ItmEffectUpdateInput(RwFDDiffuseInputRelease(index)))]
 
-    pure def RwEnvSimAdvDiffuse(p_sid : P_Sid_t, slot : Round_t) : Effects_t[RwEffect] =
-        [RwToFDDiffuse(p_sid, ItmEffectUpdateInput(RwFDDiffuseInputDiffuse({ sender : p_sid
-                                                                          , message : { slot : slot }
-                                                                          , timestamp : TimeInit
-                                                                          , is_registered : true })))]
-
-    pure def RwEnvSimAdvInject(p_sid : P_Sid_t, sender : P_Sid_t, slot : Round_t) : Effects_t[RwEffect] =
-        [RwToFDDiffuse(p_sid, ItmEffectUpdateInput(RwFDDiffuseInputInject({ sender : sender
-                                                                         , message : { slot : slot }
-                                                                         , timestamp : TimeInit
-                                                                         , is_registered : true })))]
-
     pure def RwEnvSimTransition(which : RwEnvSimAction, zs : RwEnvSimState, idle : bool, w : RwWorld) : Effects_t[RwEffect] = {
         if (not(idle)) []
         else match which {
             | RwEnvSimActionRegister(p_sid)    => if (RwEnvSimRegistered(w, p_sid)) [] else RwEnvSimReg(p_sid, w)
             | RwEnvSimActionSetOk(p_sid)       => if (and { RwEnvSimAllRegistered(w), RwInboxesHaveRoom(w.d, p_sid) }) RwEnvSimOk(p_sid) else []
             | RwEnvSimActionGetRound(p_sid)    => if (RwEnvSimAllRegistered(w)) RwEnvSimRound(p_sid) else []
-            | RwEnvSimActionActivate(p_sid)    => if (RwEnvSimAllRegistered(w)) RwEnvSimActivate(p_sid) else []
             | RwEnvSimActionContinue           => if (and { w.g.counter < RwMaxTime, RwDriftAllowsContinue(w.l) }) RwEnvSimContinue else []
             | RwEnvSimActionLocalIncrease(p_sid) => if (RwDriftAllowsLocalIncrease(w.l.get(p_sid))) RwEnvSimLocalIncrease(p_sid) else []
             | RwEnvSimActionRelease(r)         => if (and { RwEnvSimAllRegistered(w), r.index < length(w.d.get(r.p_sid).inbox) }) RwEnvSimRelease(r.p_sid, r.index) else []
-            | RwEnvSimActionAdvInject(r)       => if (and { RwEnvSimAllRegistered(w), Corrupted.contains(r.sender), not(Corrupted.contains(r.p_sid))
-                                                          , length(w.d.get(r.p_sid).inbox) + length(w.d.get(r.p_sid).ready) < InboxSize }) RwEnvSimAdvInject(r.p_sid, r.sender, r.slot) else []
-            | RwEnvSimActionAdvDiffuse(r)      => if (and { RwEnvSimAllRegistered(w), Corrupted.contains(r.p_sid), RwInboxesHaveRoom(w.d, r.p_sid) }) RwEnvSimAdvDiffuse(r.p_sid, r.slot) else []
         }
     }
 
@@ -810,16 +713,12 @@ module rw {
                 // Environment and dummy adversary
                 nondet p_sid_z = oneOf(1.to(NumberOfParties))
                 nondet idx_z   = oneOf(0.to(InboxSize - 1))
-                nondet slot_z  = oneOf(FirstRound.to(MaxRound))
-                nondet snd_z   = oneOf(1.to(NumberOfParties))
                 nondet which_z = oneOf(Set( RwEnvSimActionRegister(p_sid_z)
                                           , RwEnvSimActionSetOk(p_sid_z)
                                           , RwEnvSimActionGetRound(p_sid_z)
                                           , RwEnvSimActionContinue
                                           , RwEnvSimActionLocalIncrease(p_sid_z)
-                                          , RwEnvSimActionRelease({ p_sid : p_sid_z, index : idx_z })
-                                          , RwEnvSimActionAdvDiffuse({ p_sid : p_sid_z, slot : slot_z })
-                                          , RwEnvSimActionAdvInject({ p_sid : p_sid_z, sender : snd_z, slot : slot_z })))
+                                          , RwEnvSimActionRelease({ p_sid : p_sid_z, index : idx_z })))
 
                 RwUpdate(RwEnvSimTransition(which_z, Rw_ZS, idle, w))
             }
@@ -903,8 +802,8 @@ module rw {
         Rw_GrefRate.counter <= RwMaxTime
 
     val RwDriftBounded =
-        Rw_FLocals.keys().forall(k => and { Rw_FLocals.get(k).clock_drift <= MaxDrift
-                                          , Rw_FLocals.get(k).clock_drift >= 0 })
+        Rw_FLocals.keys().forall(k => and { (Rw_FLocals.get(k).local_counter - Rw_FLocals.get(k).local_counter_z) <= MaxDrift
+                                          , (Rw_FLocals.get(k).local_counter - Rw_FLocals.get(k).local_counter_z) >= 0 })
 
     // Theorem 7: Assuming that alpha_gamma >= (1 + epsilon) / 2, where
     // alpha_gamma is the relative stake of honest and synchronized parties, the
