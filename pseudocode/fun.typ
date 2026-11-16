@@ -141,7 +141,7 @@
   title,
   number: auto,
   supplement: "Functionality",
-  inset: 0.2em,
+  inset: 0.4em,
   indent: 0.5em,
   vstroke: 0pt + luma(200),
   line-numbers: true,
