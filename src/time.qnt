@@ -92,12 +92,12 @@ module time {
     // G-Slot
     // ^^^^^^
 
-    pure def SlotWithinOn(ls : Set[EnvSimLog_t], bound : int) : bool =
-        ls.forall(l =>
-            match l.log {
-                | LogPRound(r) => or { l.c.contains(r.p_sid)
-                                     , and { r.round <= l.round, r.round + bound >= l.round } }
-                | _            => true
-            }
-        )
+    pure def SlotWithinOn(ls : Set[EnvSimLog_t], bound : int, ahead : int) : bool =
+            ls.forall(l =>
+                match l.log {
+                    | LogPRound(r) => or { l.c.contains(r.p_sid)
+                                         , and { r.round <= l.round + ahead, r.round + bound >= l.round } }
+                    | _            => true
+                }
+            )
 }

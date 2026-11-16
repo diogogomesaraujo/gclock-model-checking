@@ -810,7 +810,11 @@ module rw {
     // relative time protocol in the FDDiffuse, FVRF, FKES, FDSIG, FT,Sigma_local,
     // and FROhybrid models realizes GT,ThetaSlot, where Theta = Delta + 1 and |Sigma| < T.
     val RwSlotWithinTheta =
-        SlotWithinOn(Rw_ZS.logs, Theta)
+        SlotWithinOn(Rw_ZS.logs, Theta, 0)
+
+    // proposed
+    val RwSlotWithinThetaAhead =
+            SlotWithinOn(Rw_ZS.logs, Theta, ThetaAhead)
 
     val RwGClockTimeAgreement = TimeAgreementOn(Rw_ZS.logs)
 

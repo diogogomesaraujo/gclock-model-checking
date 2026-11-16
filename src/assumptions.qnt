@@ -25,4 +25,6 @@ module assumptions {
     pure val InboxSize       = 1
 
     pure val Theta           = Delta + 1
+
+    pure val ThetaAhead      = (MaxDrift + RoundDuration - 1) / RoundDuration
 }
