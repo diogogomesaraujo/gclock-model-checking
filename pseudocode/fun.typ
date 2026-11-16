@@ -39,7 +39,7 @@
       stroke: none,
       inset: 0% + 5pt,
       hlines.at(0),
-      caption-style(align(caption-align, [#it.supplement #it.counter.display(it.numbering): #it.caption.body])),
+      caption-style(align(caption-align, it.caption.body)),
       hlines.at(1),
       align(start, it.body),
       hlines.at(2),
@@ -137,33 +137,6 @@
   )
 }
 
-#let functionality-figure(
-  title,
-  supplement: "Functionality",
-  inset: 0.2em,
-  indent: 0.5em,
-  vstroke: 0pt + luma(200),
-  line-numbers: true,
-  line-numbers-format: x => [#x:],
-  horizontal-offset: 1.63640em,
-  ..bits,
-) = {
-  return figure(
-    supplement: supplement,
-    kind: "algorithm",
-    caption: title,
-    algorithm(
-      indent: indent,
-      inset: inset,
-      vstroke: vstroke,
-      line-numbers: line-numbers,
-      line-numbers-format: line-numbers-format,
-      horizontal-offset: horizontal-offset,
-      ..bits,
-    ),
-  )
-}
-
 #let algorithm-figure(
   title,
   number: auto,
@@ -176,10 +149,15 @@
   horizontal-offset: 1.63640em,
   ..bits,
 ) = {
+  let label-number = if number == auto {
+    context counter(figure.where(kind: "algorithm")).display()
+  } else {
+    str(number)
+  }
   return figure(
     supplement: supplement,
     kind: "algorithm",
-    caption: title,
+    caption: [#supplement #label-number: #title],
     algorithm(
       indent: indent,
       inset: inset,
