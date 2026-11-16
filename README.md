@@ -31,10 +31,7 @@ type ITM[in, out, in_msg] = {
 }
 ```
 
-Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it:
-- All communication received from the protocol participants are forwarded directly to the environment Z. That is, when A receives incoming m from party P, it simply writes "received m from P" on the subroutine tape of Z.
-- It sends messages from the adversary to the parties, as directed. That is, when A receives "send m to P" from Z, it writes m on the incoming message tape of party P.
-- Parties can write directly to the global functionality's input tape, and the functionality can write to the parties’ output tapes.
+Depending on if a machine is a child/parent of another one, or if it corresponds to a global functionality, it has different rules for which machines can it write to and who can to it (rules can be found [here](https://swayam-padhy.gitbook.io/)).
 
 ## Ideal World
 
@@ -119,13 +116,23 @@ All tests were run on an M4 Macbook Air with 16GB of RAM using the TLC backend a
 
 The synchronization protocol chosen was the Relative Time Protocol from _Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_ as it is a faithful representation of how blockchains synchronize nodes using the proposed blocks' timestamps. 
 
-Work in progress.
+![image](pseudocode/rtp/rtp.svg)
 
 ### Hybrid Model
 
 Parties run the Real Time Protocol in a {F_Local, F_Diffuse, G_refRate}-hybrid world (the functionalities can be found in the paper previously mentioned).
 
-Work in progress.
+#### G_refRate
+
+![image](pseudocode/grefrate/grefrate.svg)
+
+#### F_Local
+
+![image](pseudocode/flocal/flocal.svg)
+
+#### F_DDiffuse
+
+![image](pseudocode/fddiffuse/fddiffuse.svg)
 
 ## References
 
@@ -134,6 +141,9 @@ Work in progress.
 - [_Ouroboros Clepsydra: Ouroboros Praos in the Universally Composable Relative Time Model_](https://eprint.iacr.org/2019/942.pdf)
 - [_Universally Composable Synchronous Computation_](https://eprint.iacr.org/2011/310.pdf)
 - [_Universally Composable Security: A New Paradigm for Cryptographic Protocols_](https://eprint.iacr.org/2000/067.pdf)
+
+### Repositories
+- [UC Model Checking in Quint](https://github.com/input-output-hk/uc_model_checking)
 
 ### Documentation
 - [Swayam's Blog](https://swayam-padhy.gitbook.io/)

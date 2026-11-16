@@ -39,7 +39,7 @@
       stroke: none,
       inset: 0% + 5pt,
       hlines.at(0),
-      caption-style(align(caption-align, it.caption)),
+      caption-style(align(caption-align, it.caption.body)),
       hlines.at(1),
       align(start, it.body),
       hlines.at(2),
@@ -139,8 +139,9 @@
 
 #let algorithm-figure(
   title,
+  number: auto,
   supplement: "Functionality",
-  inset: 0.2em,
+  inset: 0.4em,
   indent: 0.5em,
   vstroke: 0pt + luma(200),
   line-numbers: true,
@@ -148,10 +149,15 @@
   horizontal-offset: 1.63640em,
   ..bits,
 ) = {
+  let label-number = if number == auto {
+    context counter(figure.where(kind: "algorithm")).display()
+  } else {
+    str(number)
+  }
   return figure(
     supplement: supplement,
     kind: "algorithm",
-    caption: title,
+    caption: [#supplement #label-number: #title],
     algorithm(
       indent: indent,
       inset: inset,
