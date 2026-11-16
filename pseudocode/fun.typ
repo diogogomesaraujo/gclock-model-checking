@@ -137,6 +137,33 @@
   )
 }
 
+#let functionality-figure(
+  title,
+  supplement: "Functionality",
+  inset: 0.2em,
+  indent: 0.5em,
+  vstroke: 0pt + luma(200),
+  line-numbers: true,
+  line-numbers-format: x => [#x:],
+  horizontal-offset: 1.63640em,
+  ..bits,
+) = {
+  return figure(
+    supplement: supplement,
+    kind: "algorithm",
+    caption: title,
+    algorithm(
+      indent: indent,
+      inset: inset,
+      vstroke: vstroke,
+      line-numbers: line-numbers,
+      line-numbers-format: line-numbers-format,
+      horizontal-offset: horizontal-offset,
+      ..bits,
+    ),
+  )
+}
+
 #let algorithm-figure(
   title,
   supplement: "Functionality",
