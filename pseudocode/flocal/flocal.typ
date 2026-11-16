@@ -9,6 +9,7 @@
 
 
 #algorithm-figure(
+  number: 3,
   [$cal(F)_"local"^(Sigma, P)$],
   vstroke: .5pt + luma(200),
   {

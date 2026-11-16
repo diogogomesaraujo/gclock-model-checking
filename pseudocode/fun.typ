@@ -39,7 +39,7 @@
       stroke: none,
       inset: 0% + 5pt,
       hlines.at(0),
-      caption-style(align(caption-align, it.caption)),
+      caption-style(align(caption-align, [#it.supplement #it.counter.display(it.numbering): #it.caption.body])),
       hlines.at(1),
       align(start, it.body),
       hlines.at(2),
@@ -166,6 +166,7 @@
 
 #let algorithm-figure(
   title,
+  number: auto,
   supplement: "Functionality",
   inset: 0.2em,
   indent: 0.5em,

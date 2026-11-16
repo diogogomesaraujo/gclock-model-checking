@@ -9,6 +9,7 @@
 
 
 #algorithm-figure(
+  number: 4,
   [$cal(F)_"DDiffuse"^T$],
   vstroke: .5pt + luma(200),
   {

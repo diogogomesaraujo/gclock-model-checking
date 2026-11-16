@@ -9,6 +9,7 @@
 
 
 #algorithm-figure(
+  number: 2,
   [$cal(G)_"refRate"$],
   vstroke: .5pt + luma(200),
   {
