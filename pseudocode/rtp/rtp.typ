@@ -24,22 +24,6 @@
     )
     LineBreak
     Procedure(
-      [maxvalid],
-      ($cal(C)$, $C_"best"$),
-      {
-        Assign[$C_"max"$][$C_"best"$]
-        For(
-          $C_"cand" in cal(C)$,
-          If(
-            $C_"cand" gt C_"max" and C^("⌜" k)_"best" prec.eq C_"cand"$,
-            Assign[$C_"max"$][$C_"cand"$]
-          )
-        )
-        Return($C_"max"$)
-      },
-    )
-    LineBreak
-    Procedure(
       [Median],
       ("sl"),
       {
