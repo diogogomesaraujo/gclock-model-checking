@@ -38,13 +38,13 @@ The Universal Composability (UC) framework @canetti2001universally compares a pr
 
 Two ensembles $X$ and $Y$ are _computationally indistinguishable_, written $X approx Y$, if no probabilistic polynomial-time (PPT) distinguisher tells them apart with more than negligible advantage in the security parameter $kappa$.
 
-*Real world.* On input $z in {0,1}^*$ and security parameter $kappa$, $cal(Z)$ activates the parties running $pi$ and an adversary $cal(A)$. All messages between parties pass through $cal(A)$, which may corrupt parties. We write $"EXEC"_(pi, cal(A), cal(Z))$ for the ensemble of $cal(Z)$'s outputs, over all $kappa$ and $z$.
+*Real world:* On input $z in {0,1}^*$ and security parameter $kappa$, $cal(Z)$ activates the parties running $pi$ and an adversary $cal(A)$. All messages between parties pass through $cal(A)$, which may corrupt parties. We write $"EXEC"_(pi, cal(A), cal(Z))$ for the ensemble of $cal(Z)$'s outputs, over all $kappa$ and $z$.
 
-*Ideal world.* The parties are dummy parties that forward their inputs to an incorruptible ideal functionality $cal(F)$, which carries out the task. The adversary is a simulator $cal(S)$, which interacts with $cal(F)$ in the way the code of $cal(F)$ allows. The corresponding ensemble is $"EXEC"_(cal(F), cal(S), cal(Z))$.
+*Ideal world:* The parties are dummy parties that forward their inputs to an incorruptible ideal functionality $cal(F)$, which carries out the task. The adversary is a simulator $cal(S)$, which interacts with $cal(F)$ in the way the code of $cal(F)$ allows. The corresponding ensemble is $"EXEC"_(cal(F), cal(S), cal(Z))$.
 
-*Hybrid world.* In the $cal(G)$-hybrid world, the parties of $pi$ also have access to an ideal functionality $cal(G)$. This is how we model the building blocks of a protocol, such as a network or a clock.
+*Hybrid world:* In the $cal(G)$-hybrid world, the parties of $pi$ also have access to an ideal functionality $cal(G)$. This is how we model the building blocks of a protocol, such as a network or a clock.
 
-#block(inset: (left: 1em))[
+#block[
   *Definition 1 (UC realization).* A protocol $pi$ _UC-realizes_ $cal(F)$ if for every PPT adversary $cal(A)$ there is a PPT simulator $cal(S)$ such that for every PPT environment $cal(Z)$
   $ "EXEC"_(pi, cal(A), cal(Z)) approx "EXEC"_(cal(F), cal(S), cal(Z)). $
 ]
@@ -55,8 +55,8 @@ By the UC composition theorem @canetti2001universally, a protocol that realizes 
 
 The dummy adversary $cal(A)_D$ is a fixed adversary that only relays messages. It forwards everything it receives from the parties to $cal(Z)$, and delivers to a party whatever $cal(Z)$ tells it to send. It also corrupts parties only when $cal(Z)$ says so. All adversarial behavior is therefore decided by $cal(Z)$.
 
-#block(inset: (left: 1em))[
-  *Theorem 1 (@canetti2001universally).* $pi$ UC-realizes $cal(F)$ if and only if there is a simulator $cal(S)$ such that for every environment $cal(Z)$
+#block[
+  *Theorem 1 @canetti2001universally.* $pi$ UC-realizes $cal(F)$ if and only if there is a simulator $cal(S)$ such that for every environment $cal(Z)$
   $ "EXEC"_(pi, cal(A)_D, cal(Z)) approx "EXEC"_(cal(F), cal(S), cal(Z)). $
 ]
 
